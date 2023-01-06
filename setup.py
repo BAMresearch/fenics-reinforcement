@@ -10,7 +10,7 @@ long_description = (here / "README.md").read_text(encoding="utf-8")
 # Fields marked as "Optional" may be commented out.
 
 setup(
-    name="fenics-reinforcement",  # Required
+    name="reinforcement",  # Required
     # Versions should comply with PEP 440:
     # https://www.python.org/dev/peps/pep-0440/
     #
