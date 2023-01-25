@@ -1,8 +1,13 @@
-# This file creates a 3D-quadrilateral mesh in the shape of a cuboid. The user has to provide two points, defined by their x,y,z coordinates, that are most far away from each other, i.e. the first point might be located at the origin (0,0,0) and the second point might be defined by (l,w,h), meaning length, width and height of the cuboid. "margin" defined as an absolute value, is the smallest distance between the outer edges of the concrete mesh and a reinforcement element. The reinforcement discretization is given by n_x and n_y, they define how many reinforcement elements should be placed in x and y direction. The parameter s defines the maximal element size in the mesh. It may be corrected according to n_x and n_y, such that the reinforcement discretization is always held true and reinorcement&concrete elements share the same nodes. "where" describes if one or two slabs of concrete should be added. Valid options are "upper", "lower" and "both". The distance between those slabs and the upper and/or lower edge of the concrete mesh is again defined by "margin". 
+# This file covers all functions related to the mesh generation in gmsh and its conversion into separated xdmf files, which can then be used in dolfinx. 
 
 import gmsh
 import numpy as np
+import meshio
+import dolfinx as dfx
+from mpi4py import MPI
 
+
+# This function creates a 3D-quadrilateral mesh in the shape of a cuboid. The user has to provide two points, defined by their x,y,z coordinates, that are most far away from each other, i.e. the first point might be located at the origin (0,0,0) and the second point might be defined by (l,w,h), meaning length, width and height of the cuboid. "margin" defined as an absolute value, is the smallest distance between the outer edges of the concrete mesh and a reinforcement element. The reinforcement discretization is given by n_x and n_y, they define how many reinforcement elements should be placed in x and y direction. The parameter s defines the maximal element size in the mesh. It may be corrected according to n_x and n_y, such that the reinforcement discretization is always held true and reinorcement&concrete elements share the same nodes. "where" describes if one or two slabs of concrete should be added. Valid options are "upper", "lower" and "both". The distance between those slabs and the upper and/or lower edge of the concrete mesh is again defined by "margin". 
 def create_concrete_slab(point1: list, point2: list, n_x: int, n_y: int, margin: float, s: float, filename="test_mesh.msh", where="both"):
     
     x0,y0,z0 = point1
@@ -41,12 +46,10 @@ def create_concrete_slab(point1: list, point2: list, n_x: int, n_y: int, margin:
     mymesh.occ.synchronize()
     
     
-    # generate the 3D-mesh as dictated in extrude
-    meshFact = gmsh.model.mesh
-    meshFact.generate(3)
-    
-
-    
+    # add volume as physical group
+    mymesh.addPhysicalGroup(dim = 3, tags = [1], tag = 1)
+    mymesh.occ.synchronize() 
+      
     # add points and lines where reinforcement is to be added (depending on n_x and n_y), function is called for x and y separately
     x = [x0+margin,l-margin]
     y = [y0+margin,w-margin]
@@ -63,11 +66,13 @@ def create_concrete_slab(point1: list, point2: list, n_x: int, n_y: int, margin:
         x_cords = np.linspace(x[0],x[-1],Nx) # contains all x (or y) coordinates where points have to be added
         x_cords = np.repeat(x_cords,2) # doubles every element, because the same x value is added on two y values
         y_cords = np.array(y*Nx) # contains the two y - limits as often as necessary to add all points
-           
+        
+
+        
         for z_cord in z:
             for (x_cord,y_cord) in zip(x_cords,y_cords):
                 i += 1
-                
+                print("ntp+i",ntp+i)
                 # check if points for horizontal (x) or vertical (y) lines should be added
                 if addx == True: 
                     mymesh.occ.addPoint(x_cord, y_cord, z_cord, tag = ntp+i) 
@@ -85,6 +90,8 @@ def create_concrete_slab(point1: list, point2: list, n_x: int, n_y: int, margin:
     reinf_tags_y,i_points = (reinforcement_points(n_y+1,y,x,False,where,i_points)) # for y-reinforcement
     reinf_tags = np.hstack((reinf_tags_x,reinf_tags_y)) # save all reinforcement tags 
     
+
+    
     # add lines which connect the reinforcement points
     def reinforcement_lines(reinf_tags,ltp_Nx):
         line_tags = [] # save line tags for physical group
@@ -92,26 +99,54 @@ def create_concrete_slab(point1: list, point2: list, n_x: int, n_y: int, margin:
         k=0
         
         for i,point_tag in enumerate(reinf_tags):
-            if i%2 != 0 or i == ltp_Nx+1: # otherwise you will connect all points twice
+            if i%2 != 0: # otherwise you will connect all points twice
                 k+=1 # to find the correct tags
                 mymesh.occ.addLine(reinf_tags[i-1], point_tag, tag=ltl+k) 
                 line_tags.append(ltl+k)
         return line_tags
     
     line_tags = reinforcement_lines(reinf_tags,ltp_Nx) 
-    
+      
     # add new points to mesh by synchronizing
     mymesh.occ.synchronize() 
     
-    # add all reinforcement lines to a physical group
+    # add all reinforcement lines to a physical group 
     mymesh.addPhysicalGroup(dim = 1, tags = line_tags, tag = 1)
+    mymesh.occ.synchronize() 
+    
+    # now generate the 3D-mesh 
+    meshFact = gmsh.model.mesh
+    meshFact.generate(3)
     
     # Save mesh as msh file
-    gmsh.option.setNumber("Mesh.SaveAll", 1)
     gmsh.write(filename)
     gmsh.finalize
 
-
+# This function takes a msh file as input and separates the physical curve (reinforcement) from the physical volume (concrete) and saves each of them in a separated xdmf file 
+def create_xdmf(msh_file):
+    def create_mesh(mesh, cell_type):
+        cells = mesh.get_cells_type(cell_type)
+        cell_data = mesh.get_cell_data("gmsh:physical", cell_type)
+        points = mesh.points
+        out_mesh = meshio.Mesh(points=points, cells={cell_type: cells}, cell_data={"name_to_read": [cell_data]})
+        return out_mesh
+    
+    # Read mesh
+    msh = meshio.read(msh_file) 
+     
+    # Create and save one file containing the whole volume (hexahedra), and one file for the reinforcement lines
+    hexa_mesh = create_mesh(msh, "hexahedron") 
+    line_mesh = create_mesh(msh, "line")
+    
+    meshio.write("concrete_mesh.xdmf", hexa_mesh)
+    meshio.write("rebar_mesh.xdmf", line_mesh)
+    
+    with dfx.io.XDMFFile(MPI.COMM_WORLD, "concrete_mesh.xdmf", "r") as xdmf:
+        concrete_mesh = xdmf.read_mesh(name="Grid")
+    
+    with dfx.io.XDMFFile(MPI.COMM_WORLD, "rebar_mesh.xdmf", "r") as xdmf:
+        rebar_mesh = xdmf.read_mesh(name="Grid")
+    return concrete_mesh, rebar_mesh
 
     
 
