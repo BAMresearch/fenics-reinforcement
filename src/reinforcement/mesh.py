@@ -7,8 +7,23 @@ import dolfinx as dfx
 from mpi4py import MPI
 
 
-# This function creates a 3D-quadrilateral mesh in the shape of a cuboid. The user has to provide two points, defined by their x,y,z coordinates, that are most far away from each other, i.e. the first point might be located at the origin (0,0,0) and the second point might be defined by (l,w,h), meaning length, width and height of the cuboid. "margin" defined as an absolute value, is the smallest distance between the outer edges of the concrete mesh and a reinforcement element. The reinforcement discretization is given by n_x and n_y, they define how many reinforcement elements should be placed in x and y direction. The parameter s defines the maximal element size in the mesh. It may be corrected according to n_x and n_y, such that the reinforcement discretization is always held true and reinorcement&concrete elements share the same nodes. "where" describes if one or two slabs of concrete should be added. Valid options are "upper", "lower" and "both". The distance between those slabs and the upper and/or lower edge of the concrete mesh is again defined by "margin". 
-def create_concrete_slab(point1: list, point2: list, n_x: int, n_y: int, margin: float, s: float, filename="test_mesh.msh", where="both"):
+def create_concrete_slab(point1: list, point2: list, n_x: int, n_y: int, margin: float, s: float, filename: str, where="both"):
+    '''
+    This function creates a 3D-quadrilateral mesh in the shape of a cuboid.
+    The user has to provide two points, defined by their x,y,z coordinates, 
+    that are most far away from each other, i.e. the first point might be located
+    at the origin (0,0,0) and the second point might be defined by (l,w,h), meaning
+    length, width and height of the cuboid. "margin" defined as an absolute value, 
+    is the smallest distance between the outer edges of the concrete mesh and a 
+    reinforcement element. The reinforcement discretization is given by n_x and n_y, 
+    they define how many reinforcement elements should be placed in x and y direction. 
+    The parameter s defines the maximal element size in the mesh. It may be corrected 
+    according to n_x and n_y, such that the reinforcement discretization is always held
+    true and reinorcement&concrete elements share the same nodes. "where" describes if 
+    one or two slabs of concrete should be added. Valid options are "upper", "lower" 
+    and "both". The distance between those slabs and the upper and/or lower edge of the
+    concrete mesh is again defined by "margin".
+    '''
     
     x0,y0,z0 = point1
     l,w,h = point2
