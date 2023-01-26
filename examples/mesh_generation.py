@@ -1,11 +1,5 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Jan 25 10:14:24 2023
+"""Example for mesh creation using the mesh submodule"""
 
-@author: mcappone
-"""
-# example on how to use mesh.py
 from reinforcement import create_concrete_slab, create_xdmf
 l = 1.5 # length 
 w = 2 # width
@@ -18,6 +12,6 @@ ny=7 # reinforcement density (number of elements) in y direction
 s_exp = 0.1 # maximal element size
 filename = "test_mesh.msh"
 
-create_concrete_slab(point1=point1, point2=point2, n_x=nx, n_y=ny, margin=margin, s=s_exp, where="lower")
+create_concrete_slab(point1, point2, nx, ny, margin, s_exp, filename, where="lower")
 
 concrete_mesh,rebar_mesh = create_xdmf(msh_file=filename)
