@@ -6,6 +6,7 @@ import meshio
 import dolfinx as dfx
 from mpi4py import MPI
 from numpy.typing import ArrayLike
+import math
 
 def create_concrete_slab(
     point1: ArrayLike,
@@ -47,7 +48,7 @@ def create_concrete_slab(
 
     Returns
     -------
-    
+
     """
 
     x0, y0, z0 = point1
@@ -73,14 +74,14 @@ def create_concrete_slab(
 
     concrete_elems_x = num_elems(int((l - 2 * margin) / s), n_x + 1)
     concrete_elems_y = num_elems(int((w - 2 * margin) / s), n_y + 1)
-
+    n_elements_margin = math.ceil(margin/s)
     # extrude three times, point -> line (x-direction), line -> rectangle (y-direction), rectangle -> cuboid (z-direction)
     mymesh.occ.extrude(
         [(0, point1)],
         l,
         0,
         0,
-        numElements=[1, concrete_elems_x, 1],
+        numElements=[n_elements_margin, concrete_elems_x, n_elements_margin],
         heights=[margin / l, 1 - margin / l, 1],
         recombine=True,
     )
@@ -91,7 +92,7 @@ def create_concrete_slab(
         0,
         w,
         0,
-        numElements=[1, concrete_elems_y, 1],
+        numElements=[n_elements_margin, concrete_elems_y, n_elements_margin],
         heights=[margin / w, 1 - margin / w, 1],
         recombine=True,
     )
@@ -102,7 +103,7 @@ def create_concrete_slab(
         0,
         0,
         h,
-        numElements=[1, int((h - 2 * margin) / s), 1],
+        numElements=[n_elements_margin, int((h - 2 * margin) / s), n_elements_margin],
         heights=[margin / h, 1 - margin / h, 1],
         recombine=True,
     )
