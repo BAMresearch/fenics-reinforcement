@@ -15,7 +15,8 @@ def create_concrete_slab(
     n_y: int,
     margin: float,
     s: float,
-    filename: str,
+    msh_filename: str,
+    xdmf_filenames: list,
     where="both",
 ):
     """
@@ -189,36 +190,39 @@ def create_concrete_slab(
     meshFact.generate(3)
 
     # Save mesh as msh file
-    gmsh.write(filename)
+    gmsh.write(msh_filename)
     gmsh.finalize
+    
+    # This function takes a msh file as input and separates the physical curve (reinforcement) from the physical volume (concrete) and saves each of them in a separated xdmf file
+    def create_xdmf(msh_file,xdmf_files):
+        def create_mesh(mesh, cell_type):
+            cells = mesh.get_cells_type(cell_type)
+            cell_data = mesh.get_cell_data("gmsh:physical", cell_type)
+            points = mesh.points
+            out_mesh = meshio.Mesh(
+                points=points,
+                cells={cell_type: cells},
+                cell_data={"name_to_read": [cell_data]},
+            )
+            return out_mesh
+
+        # Read mesh
+        msh = meshio.read(msh_file)
+
+        # Create and save one file containing the whole volume (hexahedra), and one file for the reinforcement lines
+        hexa_mesh = create_mesh(msh, "hexahedron")
+        line_mesh = create_mesh(msh, "line")
+
+        meshio.write(xdmf_files[0], hexa_mesh)
+        meshio.write(xdmf_files[1], line_mesh)
+
+    create_xdmf(msh_filename,xdmf_filenames)
 
 
-# This function takes a msh file as input and separates the physical curve (reinforcement) from the physical volume (concrete) and saves each of them in a separated xdmf file
-def create_xdmf(msh_file):
-    def create_mesh(mesh, cell_type):
-        cells = mesh.get_cells_type(cell_type)
-        cell_data = mesh.get_cell_data("gmsh:physical", cell_type)
-        points = mesh.points
-        out_mesh = meshio.Mesh(
-            points=points,
-            cells={cell_type: cells},
-            cell_data={"name_to_read": [cell_data]},
-        )
-        return out_mesh
-
-    # Read mesh
-    msh = meshio.read(msh_file)
-
-    # Create and save one file containing the whole volume (hexahedra), and one file for the reinforcement lines
-    hexa_mesh = create_mesh(msh, "hexahedron")
-    line_mesh = create_mesh(msh, "line")
-
-    meshio.write("concrete_mesh.xdmf", hexa_mesh)
-    meshio.write("rebar_mesh.xdmf", line_mesh)
-
-    with dfx.io.XDMFFile(MPI.COMM_WORLD, "concrete_mesh.xdmf", "r") as xdmf:
+def read_xdmf(xdmf_files):
+    with dfx.io.XDMFFile(MPI.COMM_WORLD, xdmf_files[0], "r") as xdmf:
         concrete_mesh = xdmf.read_mesh(name="Grid")
 
-    with dfx.io.XDMFFile(MPI.COMM_WORLD, "rebar_mesh.xdmf", "r") as xdmf:
+    with dfx.io.XDMFFile(MPI.COMM_WORLD, xdmf_files[1], "r") as xdmf:
         rebar_mesh = xdmf.read_mesh(name="Grid")
     return concrete_mesh, rebar_mesh

@@ -1,2 +1,2 @@
 from .rebar import RebarInterface
-from .mesh import create_concrete_slab, create_xdmf
+from .mesh import create_concrete_slab
