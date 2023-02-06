@@ -8,8 +8,11 @@ from mpi4py import MPI
 from numpy.typing import ArrayLike
 import math
 
-#  correct number of concrete elements (defined by s) in order to fit the coice of n_x and n_y
+
 def _num_elems(min_amount_elems, reinf_elems):
+    '''
+    Corrects number of concrete elements (defined by s) in order to fit the coice of n_x and n_y.
+    '''
     reinf_elems -= 1
     if min_amount_elems % reinf_elems == 0:
         return min_amount_elems
@@ -17,6 +20,9 @@ def _num_elems(min_amount_elems, reinf_elems):
         return int(np.ceil(min_amount_elems / reinf_elems)) * reinf_elems
     
 def _reinforcement_points(Nx, x, y, addx, where, i, margin):
+    '''
+    Generates reinforcement nodes.
+    '''
     if where == "upper":
         z = [1 - margin]
     elif where == "lower":
@@ -49,8 +55,11 @@ def _reinforcement_points(Nx, x, y, addx, where, i, margin):
             reinf_tags.append(ntp + i)
     return reinf_tags, i
 
-# add lines which connect the reinforcement points
-def _reinforcement_lines(reinf_tags, ltp_Nx):
+
+def _reinforcement_lines(reinf_tags):
+    '''
+    Generates lines that connect the reinforcement nodes.
+    '''
     line_tags = []  # save line tags for physical group
     ltl = gmsh.model.occ.getEntities(1)[-1][-1]  # "last tag line"
     k = 0
@@ -62,8 +71,11 @@ def _reinforcement_lines(reinf_tags, ltp_Nx):
             line_tags.append(ltl + k)
     return line_tags
 
-# This function takes a msh file as input and separates the physical curve (reinforcement) from the physical volume (concrete) and saves each of them in a separated xdmf file
+
 def _create_xdmf(msh_file,xdmf_files):
+    '''
+    Reads mesh (msh file) and creates two xdmf files (conrete & reinforcement) from it.
+    '''
     def create_mesh(mesh, cell_type):
         cells = mesh.get_cells_type(cell_type)
         cell_data = mesh.get_cell_data("gmsh:physical", cell_type)
@@ -118,8 +130,10 @@ def create_concrete_slab(
         Maximal element size. It may be corrected according to n_x and n_y, such that
         the reinforcement discretization is always held true and reinorcement&concrete
         elements share the same nodes.
-    filename: str
-        Name of the msh file.
+    msh_filename: str
+        Filename of the mesh (msh file).
+    xdmf_filenames : list
+        Desired names of the two xdmf meshes (concrete & reinforcement).
     where: str
         Position of the reinforecement bars. Valid options are "upper", "lower"
         and "both".
@@ -145,6 +159,7 @@ def create_concrete_slab(
     concrete_elems_x = _num_elems(int((l - 2 * margin) / s), n_x + 1)
     concrete_elems_y = _num_elems(int((w - 2 * margin) / s), n_y + 1)
     n_elements_margin = math.ceil(margin/s)
+    
     # extrude three times, point -> line (x-direction), line -> rectangle (y-direction), rectangle -> cuboid (z-direction)
     mymesh.occ.extrude(
         [(0, point1)],
@@ -192,14 +207,11 @@ def create_concrete_slab(
         n_x + 1, x, y, True, where, i_points, margin
     )  # for reinforcement in x-direction
 
-    # before adding reinforcement in y-direction, it is necessary to know which was the last point that has been added before
-    ltp_Nx = mymesh.occ.getEntities(0)[-1][-1]  # "last tag point"
     reinf_tags_y, i_points = _reinforcement_points(
         n_y + 1, y, x, False, where, i_points, margin
     )  # for y-reinforcement
     reinf_tags = np.hstack((reinf_tags_x, reinf_tags_y))  # save all reinforcement tags
-
-    line_tags = _reinforcement_lines(reinf_tags, ltp_Nx)
+    line_tags = _reinforcement_lines(reinf_tags)
 
     # add new points to mesh by synchronizing
     mymesh.occ.synchronize()
@@ -221,6 +233,22 @@ def create_concrete_slab(
 
 
 def read_xdmf(xdmf_files):
+    '''
+    File that reads xdmf_files to use them in FEniCSx
+
+    Parameters
+    ----------
+    xdmf_files : list
+        Names (str) of the xdmf_files, [concrete, reinforcement] - in this order.
+
+    Returns
+    -------
+    concrete_mesh : dolfinx.mesh.Mesh
+        The concrete mesh (hexa elements).
+    rebar_mesh : dolfinx.mesh.Mesh
+        The reinforcement mesh (line elements).
+
+    '''
     with dfx.io.XDMFFile(MPI.COMM_WORLD, xdmf_files[0], "r") as xdmf:
         concrete_mesh = xdmf.read_mesh(name="Grid")
 
