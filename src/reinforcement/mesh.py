@@ -13,8 +13,9 @@ def _num_elems(min_amount_elems, reinf_elems):
     '''
     Corrects number of concrete elements (defined by s) in order to fit the coice of n_x and n_y.
     '''
-    reinf_elems -= 1
-    if min_amount_elems % reinf_elems == 0:
+    if reinf_elems == 0:
+        return min_amount_elems
+    elif min_amount_elems % reinf_elems == 0:
         return min_amount_elems
     else:
         return int(np.ceil(min_amount_elems / reinf_elems)) * reinf_elems
@@ -23,6 +24,7 @@ def _reinforcement_points(Nx, x, y, addx, where, i, margin):
     '''
     Generates reinforcement nodes.
     '''
+    
     if where == "upper":
         z = [1 - margin]
     elif where == "lower":
@@ -45,7 +47,6 @@ def _reinforcement_points(Nx, x, y, addx, where, i, margin):
     for z_cord in z:
         for (x_cord, y_cord) in zip(x_cords, y_cords):
             i += 1
-            print("ntp+i", ntp + i)
             # check if points for horizontal (x) or vertical (y) lines should be added
             if addx == True:
                 gmsh.model.occ.addPoint(x_cord, y_cord, z_cord, tag=ntp + i)
@@ -53,6 +54,7 @@ def _reinforcement_points(Nx, x, y, addx, where, i, margin):
             else:
                 gmsh.model.occ.addPoint(y_cord, x_cord, z_cord, tag=ntp + i)
             reinf_tags.append(ntp + i)
+            
     return reinf_tags, i
 
 
@@ -63,10 +65,11 @@ def _reinforcement_lines(reinf_tags):
     line_tags = []  # save line tags for physical group
     ltl = gmsh.model.occ.getEntities(1)[-1][-1]  # "last tag line"
     k = 0
-
     for i, point_tag in enumerate(reinf_tags):
         if i % 2 != 0:  # otherwise you will connect all points twice
             k += 1  # to find the correct tags
+
+            
             gmsh.model.occ.addLine(reinf_tags[i - 1], point_tag, tag=ltl + k)
             line_tags.append(ltl + k)
     return line_tags
@@ -156,8 +159,8 @@ def create_concrete_slab(
     point1 = mymesh.occ.addPoint(x0, y0, z0)
     mymesh.occ.synchronize()
 
-    concrete_elems_x = _num_elems(int((l - 2 * margin) / s), n_x + 1)
-    concrete_elems_y = _num_elems(int((w - 2 * margin) / s), n_y + 1)
+    concrete_elems_x = _num_elems(int((l - 2 * margin) / s), n_x-1)
+    concrete_elems_y = _num_elems(int((w - 2 * margin) / s), n_y-1)
     n_elements_margin = math.ceil(margin/s)
     
     # extrude three times, point -> line (x-direction), line -> rectangle (y-direction), rectangle -> cuboid (z-direction)
@@ -204,13 +207,14 @@ def create_concrete_slab(
     i_points = 0
     
     reinf_tags_x, i_points = _reinforcement_points(
-        n_x + 1, x, y, True, where, i_points, margin
+        n_x, x, y, True, where, i_points, margin
     )  # for reinforcement in x-direction
 
     reinf_tags_y, i_points = _reinforcement_points(
-        n_y + 1, y, x, False, where, i_points, margin
+        n_y, y, x, False, where, i_points, margin
     )  # for y-reinforcement
     reinf_tags = np.hstack((reinf_tags_x, reinf_tags_y))  # save all reinforcement tags
+    reinf_tags = [int(x) for x in reinf_tags] # make sure that reinf_tags contains only integers, no floats
     line_tags = _reinforcement_lines(reinf_tags)
 
     # add new points to mesh by synchronizing
