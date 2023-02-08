@@ -13,7 +13,6 @@ def _num_elems(min_amount_elems, reinf_elems):
     '''
     Corrects number of concrete elements (defined by s) in order to fit the coice of n_x and n_y.
     '''
-    #reinf_elems -= 1
     if reinf_elems == 0:
         return min_amount_elems
     elif min_amount_elems % reinf_elems == 0:
@@ -66,7 +65,6 @@ def _reinforcement_lines(reinf_tags):
     line_tags = []  # save line tags for physical group
     ltl = gmsh.model.occ.getEntities(1)[-1][-1]  # "last tag line"
     k = 0
-    print(reinf_tags)
     for i, point_tag in enumerate(reinf_tags):
         if i % 2 != 0:  # otherwise you will connect all points twice
             k += 1  # to find the correct tags
