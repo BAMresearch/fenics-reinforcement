@@ -5,6 +5,24 @@ import ufl
 import numpy as np
 from petsc4py import PETSc
 
+class NonlinearReinforcementProblem(dfx.fem.petsc.NonlinearProblem):
+    """
+    This class demonstrates how the reinforcement could be used in a nonlinear problem.
+    """
+    def __init__(self, R, dR, u, rebar, bcs = [], form_compiler_params={}, jit_params={}):
+        super().__init__(R, u, bcs, dR,form_compiler_params, jit_params)
+        self.rebar = rebar
+    
+    def F(self, x: PETSc.Vec, b: PETSc.Vec):
+        super().F(x,b)
+        self.rebar.apply_to_forces(b, x)
+        # The implementation in a real nonlinear case might look a little different
+
+    def J(self, x: PETSc.Vec, A: PETSc.Mat):
+        super().J(x,A)
+        self.rebar.apply_to_stiffness(A, x)
+        # The implementation in a real nonlinear case might look a little different
+
 
 parameters_steel = {"E": 42.0, "nu": 0.3, "A": 0.02}
 parameters_concrete = {"E": 21.0, "nu": 0.3}
@@ -52,6 +70,7 @@ def sigma(v, parameters):
     return lam * ufl.tr(e) * ufl.Identity(3) + 2.0 * mu * e
 
 
+u = dfx.fem.Function(P1, name="Displacement")
 
 u_ = ufl.TrialFunction(P1)
 v_ = ufl.TestFunction(P1)
@@ -77,9 +96,11 @@ concrete_mesh.topology.create_connectivity(
 ds = ufl.Measure("ds", domain=concrete_mesh, subdomain_data=facet_tag)
 
 
-force_form = force * ufl.dot(ufl.FacetNormal(concrete_mesh), u_) * ds(42)
+external_force_form = force * ufl.dot(ufl.FacetNormal(concrete_mesh), v_) * ds(42)
+internal_force_form = ufl.inner(eps(v_), sigma(u, parameters_concrete)) * ufl.dx
+residual = internal_force_form - external_force_form
 
-# dirichlet bcs
+# b = dfx.fem.petsc.assemble_vector(dfx.fem.form(residual))
 
 # right side
 def left(x):
@@ -125,17 +146,12 @@ bc_y = dfx.fem.dirichletbc(
 
 bcs = [bc_x, bc_y, bc_z]
 
-u = dfx.fem.Function(P1, name="Displacement")
-b = dfx.fem.petsc.assemble_vector(dfx.fem.form(force_form))
+problem = NonlinearReinforcementProblem( dfx.fem.form(residual), dfx.fem.form(a), u, rebar, bcs=bcs)
+solver = dfx.nls.petsc.NewtonSolver(concrete_mesh.comm, problem)
 
-A = dfx.fem.petsc.assemble_matrix(dfx.fem.form(a), bcs=bcs)
-A.assemble()
-dfx.fem.apply_lifting(b.array, [dfx.fem.form(a)], [bcs])
+# Set Newton solver options
+solver.atol = 1e-8
+solver.rtol = 1e-8
+solver.convergence_criterion = "incremental"
 
-# apply reinforcement
-rebar.apply_to_stiffness(A, u.vector)
-rebar.apply_to_forces(b, u.vector)
-# solve the system
-solver = PETSc.KSP().create(concrete_mesh.comm)
-solver.setOperators(A)
-solver.solve(b, u.vector)
+solver.solve(u)
