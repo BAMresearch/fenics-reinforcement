@@ -13,28 +13,9 @@ class RebarInterface(ABC):
         self.function_space = function_space
         self.parameters = parameters
         self.dofs = []
-    
-    @abstractmethod
-    def apply_to_forces(self, f_int, u):
-        pass
-    
-    @abstractmethod
-    def apply_to_stiffness(self, K, u):
-        pass
-    
-class ElasticTrussRebar(RebarInterface):
-    def __init__(self, concrete_mesh, rebar_mesh, parameters):
-        super().__init__(concrete_mesh, rebar_mesh, parameters)
         self._assign_dofs()
-        
-    def apply_to_forces(self, f_int, u):
-        print("sad")
-        
-    def apply_to_sitffness(self, K, u):
-        print("fnsjf")
     
     def _assign_dofs(self, tol = 1e-6):
-        
         # first all reinforcement dofs and their coordinates are found and saved in geometry_entities and points respectively
         fdim = self.rebar_mesh.topology.dim
         self.rebar_mesh.topology.create_connectivity(fdim, 0)
@@ -62,3 +43,20 @@ class ElasticTrussRebar(RebarInterface):
             raise Exception(f"{len(dofs)} dofs found at ({x},{y},{z}), expected 1. Try adjusting the tolerance")
         
         return dofs * 3. + np.arange(3, dtype=np.float64)
+    
+    @abstractmethod
+    def apply_to_forces(self, f_int, u):
+        pass
+    
+    @abstractmethod
+    def apply_to_stiffness(self, K, u):
+        pass
+    
+class ElasticTrussRebar(RebarInterface):
+        
+    def apply_to_forces(self, f_int, u):
+        print("sad")
+        
+    def apply_to_stiffness(self, K, u):
+        print("fnsjf")
+    
