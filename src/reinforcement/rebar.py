@@ -13,7 +13,7 @@ class RebarInterface(ABC):
         self.function_space = function_space
         self.parameters = parameters
         self.dof_array = np.array([], dtype=np.int32)
-        #self._assign_dofs()
+        self._assign_dofs()
     
     def _assign_dofs(self, tol = 1e-6):
         # first all reinforcement dofs and their coordinates are found and saved in geometry_entities and points respectively
@@ -59,22 +59,22 @@ class ElasticTrussRebar(RebarInterface):
     Equations from http://what-when-how.com/the-finite-element-method/fem-for-trusses-finite-element-method-part-1/
     """
     def apply_to_stiffness(self,K, u): 
-        points = self.function_space.tabulate_dof_coordiantes().flatten
+        points = self.function_space.tabulate_dof_coordinates().flatten()
         K_1d = np.array([[1.,-1.],[-1.,1.]])
         T = np.zeros((2,6))
         for i, _ in enumerate(self.dof_array[::2]):
             start, end = self.dof_array[i], self.dof_array[i+1]
             delta_x = points[end] - points[start]
-            delta_u = u.vector.array[end] - u.vector.array[start]
-            u_axial = np.norm(delta_u, 2)
-            l_axial = np.norm(delta_x, 2)
+            delta_u = u.array[end] - u.array[start]
+            u_axial = np.linalg.norm(delta_u, 2)
+            l_axial = np.linalg.norm(delta_x, 2)
             #eps = u_axial/l_axial
             
             matrix_entries = delta_x/l_axial
             T[0,:3] = matrix_entries    
             T[1,3:] = matrix_entries    
             AEL = self.parameters["A"]*self.parameters["E"]/l_axial
-            K_local = T.T @ AEL * K_1d @ T
+            K_local = T.T @ (AEL * K_1d) @ T
             
             dof_array=np.concatenate((start,end))
             K.setOption(PETSc.Mat.Option.NEW_NONZERO_ALLOCATION_ERR, False) # otherwise no new values can be added to new entries
@@ -82,21 +82,21 @@ class ElasticTrussRebar(RebarInterface):
             K.assemble()
 
     def apply_to_forces(self,f_int, u): 
-        points = self.function_space.tabulate_dof_coordiantes().flatten
+        points = self.function_space.tabulate_dof_coordinates().flatten()
         f_1d = np.array([-1.,1.])
         T = np.zeros((2,6))
         for i, _ in enumerate(self.dof_array[::2]):
             start, end = self.dof_array[i], self.dof_array[i+1]
             delta_x = points[end] - points[start]
-            delta_u = u.vector.array[end] - u.vector.array[start]
-            u_axial = np.norm(delta_u, 2)
-            l_axial = np.norm(delta_x, 2)
+            delta_u = u.array[end] - u.array[start]
+            u_axial = np.linalg.norm(delta_u, 2)
+            l_axial = np.linalg.norm(delta_x, 2)
             
             matrix_entries = delta_x/l_axial
             T[0,:3] = matrix_entries    
             T[1,3:] = matrix_entries    
             AEL = self.parameters["A"]*self.parameters["E"]/l_axial
-            f_local = T.T @ AEL * delta_u * f_1d
+            f_local = T.T @ (AEL * u_axial * f_1d)
             
             dof_array=np.concatenate((start,end))
             f_int.setValues(dof_array, f_local,addv=PETSc.InsertMode.ADD)

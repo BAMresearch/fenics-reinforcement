@@ -1,17 +1,9 @@
 from reinforcement.mesh import create_concrete_slab, read_xdmf
-from reinforcement.rebar import RebarInterface
+from reinforcement.rebar import ElasticTrussRebar
 import dolfinx as dfx
 import ufl
 import numpy as np
 from petsc4py import PETSc
-
-
-class DummyRebar(RebarInterface):
-    def apply_to_forces(self, f_int, u):
-        print("please implement me :(")
-
-    def apply_to_stiffness(self, K, u):
-        print("please implement me :(")
 
 
 parameters_steel = {"E": 42.0, "nu": 0.3, "A": 0.02}
@@ -39,7 +31,9 @@ create_concrete_slab(
 
 concrete_mesh, rebar_mesh = read_xdmf(xdmf_filenames)
 
-rebar = DummyRebar(concrete_mesh, rebar_mesh, parameters_steel)
+P1 = dfx.fem.VectorFunctionSpace(concrete_mesh, ("CG", 1))
+
+rebar = ElasticTrussRebar(concrete_mesh, rebar_mesh, P1, parameters_steel)
 
 
 def eps(v):
@@ -58,7 +52,6 @@ def sigma(v, parameters):
     return lam * ufl.tr(e) * ufl.Identity(3) + 2.0 * mu * e
 
 
-P1 = dfx.fem.VectorFunctionSpace(concrete_mesh, ("CG", 1))
 
 u_ = ufl.TrialFunction(P1)
 v_ = ufl.TestFunction(P1)
@@ -141,7 +134,7 @@ dfx.fem.apply_lifting(b.array, [dfx.fem.form(a)], [bcs])
 
 # apply reinforcement
 rebar.apply_to_stiffness(A, u.vector)
-
+rebar.apply_to_forces(b, u.vector)
 # solve the system
 solver = PETSc.KSP().create(concrete_mesh.comm)
 solver.setOperators(A)
