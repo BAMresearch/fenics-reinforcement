@@ -4,6 +4,9 @@ import dolfinx as dfx
 import ufl
 import numpy as np
 from petsc4py import PETSc
+from pint import UnitRegistry
+
+ureg = UnitRegistry()
 
 class NonlinearReinforcementProblem(dfx.fem.petsc.NonlinearProblem):
     """
@@ -15,6 +18,7 @@ class NonlinearReinforcementProblem(dfx.fem.petsc.NonlinearProblem):
     
     def F(self, x: PETSc.Vec, b: PETSc.Vec):
         super().F(x,b)
+        print("I am in F(x,b)")
         self.rebar.apply_to_forces(b, x)
         # The implementation in a real nonlinear case might look a little different
 
@@ -24,21 +28,29 @@ class NonlinearReinforcementProblem(dfx.fem.petsc.NonlinearProblem):
         # The implementation in a real nonlinear case might look a little different
 
 
-parameters_steel = {"E": 42.0, "nu": 0.3, "A": 0.02}
-parameters_concrete = {"E": 21.0, "nu": 0.3}
+parameters_steel = {
+    "E": (210. * ureg.gigapascal).to_base_units().magnitude,
+    "nu": 0.3,
+    "A": (np.pi * (0.75 * ureg.centimeters)**2).to_base_units().magnitude,
+    }
+parameters_concrete = {
+    "E": (25 * ureg.gigapascal).to_base_units().magnitude,
+    "nu": 0.3,
+    }
 
-force = 0.8
+force = (50 * ureg.kilonewton).to_base_units().magnitude
 
-length = 2
-width = 0.3
-height = 0.3
-point1 = [0, 0, 0]
+length = (2 * ureg.meter).to_base_units().magnitude
+width = (30 * ureg.centimeter).to_base_units().magnitude 
+height = (30 * ureg.centimeter).to_base_units().magnitude
+
+point1 = [0., 0., 0.]
 point2 = [length, width, height]
 
-margin = 0.03
+margin = (3 * ureg.centimeter).to_base_units().magnitude
 nx = 1
 ny = 2
-h = 0.05
+h = (3 * ureg.centimeter).to_base_units().magnitude
 msh_filename = "test_mesh.msh"
 xdmf_filenames = ["concrete_mesh.xdmf", "rebar_mesh.xdmf"]
 
@@ -84,7 +96,7 @@ facet_indices = dfx.mesh.locate_entities(
     concrete_mesh,
     fdim,
     lambda x: np.logical_and(
-        np.isclose(x[0], length / 2, atol=h), np.isclose(x[1], height, atol=h)
+        np.isclose(x[0], length / 2, atol=h), np.isclose(x[2], height, atol=h)
     ),
 )
 facet_markers = np.full(len(facet_indices), marker).astype(np.int32)
@@ -98,17 +110,15 @@ ds = ufl.Measure("ds", domain=concrete_mesh, subdomain_data=facet_tag)
 
 external_force_form = force * ufl.dot(ufl.FacetNormal(concrete_mesh), v_) * ds(42)
 internal_force_form = ufl.inner(eps(v_), sigma(u, parameters_concrete)) * ufl.dx
-residual = internal_force_form - external_force_form
-
-# b = dfx.fem.petsc.assemble_vector(dfx.fem.form(residual))
+residual =   -internal_force_form
 
 # right side
 def left(x):
-    return np.logical_and(np.isclose(x[0], margin), np.isclose(x[1], 0.0))
+    return np.logical_and(np.isclose(x[0], margin), np.isclose(x[2], 0.0))
 
 
 def right(x):
-    return np.logical_and(np.isclose(x[0], length - margin), np.isclose(x[1], 0.0))
+    return np.logical_and(np.isclose(x[0], length - margin), np.isclose(x[2], 0.0))
 
 
 # left side
@@ -144,14 +154,26 @@ bc_y = dfx.fem.dirichletbc(
     P1.sub(1),
 )
 
-bcs = [bc_x, bc_y, bc_z]
+boundary_entities_upper = dfx.mesh.locate_entities_boundary(
+    concrete_mesh, concrete_mesh.topology.dim - 2, 
+    lambda x: np.logical_and(
+        np.isclose(x[0], length / 2, atol=h), np.isclose(x[2], height, atol=h)
+    ),
+)
+boundary_dofs_upper = dfx.fem.locate_dofs_topological(P1.sub(2), concrete_mesh.topology.dim - 2, boundary_entities_upper)
+bc_upper = dfx.fem.dirichletbc(PETSc.ScalarType(-0.1), boundary_dofs_upper, P1.sub(2))
 
-problem = NonlinearReinforcementProblem( dfx.fem.form(residual), dfx.fem.form(a), u, rebar, bcs=bcs)
+bcs = [bc_x, bc_y, bc_z, bc_upper]
+
+problem = NonlinearReinforcementProblem(residual, a, u, rebar, bcs)
 solver = dfx.nls.petsc.NewtonSolver(concrete_mesh.comm, problem)
 
 # Set Newton solver options
 solver.atol = 1e-8
-solver.rtol = 1e-8
+solver.rtol = 1e-20
 solver.convergence_criterion = "incremental"
 
-solver.solve(u)
+tup = solver.solve(u)
+with dfx.io.XDMFFile( concrete_mesh.comm, "displacements.xdmf", "w") as f:
+    f.write_mesh(concrete_mesh)
+    f.write_function(u)
