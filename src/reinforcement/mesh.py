@@ -9,6 +9,7 @@ from numpy.typing import ArrayLike
 import math
 
 
+
 def _num_elems(min_amount_elems, reinf_elems):
     '''
     Corrects number of concrete elements (defined by s) in order to fit the coice of n_x and n_y.
@@ -43,7 +44,7 @@ def _reinforcement_points(Nx, x, y, addx, where, i, margin):
     y_cords = np.array(
         y * Nx
     )  # contains the two y - limits as often as necessary to add all points
-
+    
     for z_cord in z:
         for (x_cord, y_cord) in zip(x_cords, y_cords):
             i += 1
@@ -145,7 +146,7 @@ def create_concrete_slab(
     -------
 
     """
-
+   
     x0, y0, z0 = point1
     l, w, h = point2
 
@@ -154,7 +155,7 @@ def create_concrete_slab(
 
     # alias to facilitate code writing
     mymesh = gmsh.model
-
+    gmsh.option.setNumber("Mesh.CharacteristicLengthMin",100)
     # create the first point
     point1 = mymesh.occ.addPoint(x0, y0, z0)
     mymesh.occ.synchronize()
@@ -206,15 +207,22 @@ def create_concrete_slab(
     y = [y0 + margin, w - margin]
     i_points = 0
     
+    print("x",concrete_elems_x)
+    print("y",concrete_elems_y)
+    
     reinf_tags_x, i_points = _reinforcement_points(
         n_x, x, y, True, where, i_points, margin
     )  # for reinforcement in x-direction
 
     reinf_tags_y, i_points = _reinforcement_points(
-        n_y, y, x, False, where, i_points, margin
+      n_y, y, x, False, where, i_points, margin
     )  # for y-reinforcement
     reinf_tags = np.hstack((reinf_tags_x, reinf_tags_y))  # save all reinforcement tags
     reinf_tags = [int(x) for x in reinf_tags] # make sure that reinf_tags contains only integers, no floats
+    
+    print(reinf_tags)
+    
+    
     line_tags = _reinforcement_lines(reinf_tags)
 
     # add new points to mesh by synchronizing
@@ -228,6 +236,8 @@ def create_concrete_slab(
     meshFact = gmsh.model.mesh
     meshFact.generate(3)
 
+    
+    
     # Save mesh as msh file
     gmsh.write(msh_filename)
     gmsh.finalize
