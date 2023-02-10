@@ -65,10 +65,7 @@ class ElasticTrussRebar(RebarInterface):
         for i, _ in enumerate(self.dof_array[::2]):
             start, end = self.dof_array[i], self.dof_array[i+1]
             delta_x = points[end] - points[start]
-            delta_u = u.array[end] - u.array[start]
-            u_axial = np.linalg.norm(delta_u, 2)
             l_axial = np.linalg.norm(delta_x, 2)
-            #eps = u_axial/l_axial
             
             matrix_entries = delta_x/l_axial
             T[0,:3] = matrix_entries    
@@ -89,9 +86,8 @@ class ElasticTrussRebar(RebarInterface):
             start, end = self.dof_array[i], self.dof_array[i+1]
             delta_x = points[end] - points[start]
             delta_u = u.array[end] - u.array[start]
-            u_axial = np.linalg.norm(delta_u, 2)
             l_axial = np.linalg.norm(delta_x, 2)
-            
+            u_axial = np.linalg.norm(delta_x-delta_u, 2)-l_axial
             matrix_entries = delta_x/l_axial
             T[0,:3] = matrix_entries    
             T[1,3:] = matrix_entries    
