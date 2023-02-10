@@ -7,12 +7,7 @@ Created on Wed Feb  8 09:59:55 2023
 """
 import dolfinx as dfx
 from mpi4py import MPI
-from reinforcement import RebarInterface,elastic_truss_rebar,read_xdmf
-
-
-
-
-
+from reinforcement import RebarInterface,ElasticTrussRebar,read_xdmf
 
 concrete_mesh, rebar_mesh = read_xdmf(["concrete_mesh.xdmf","rebar_mesh.xdmf"])
 V1 = dfx.fem.VectorFunctionSpace(
@@ -20,10 +15,10 @@ V1 = dfx.fem.VectorFunctionSpace(
 )  
 
 parameters = {
-  "E": "10",
-  "VectorFunctionSpace_concrete": V1
+  "E": 10.,
+  "A": 0.02,
 }
 
 
-e = elastic_truss_rebar(concrete_mesh, rebar_mesh, parameters)
-e.assign_dofs()
+e = ElasticTrussRebar(concrete_mesh, rebar_mesh, V1, parameters)
+e._assign_dofs()
