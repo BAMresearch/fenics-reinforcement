@@ -39,7 +39,7 @@ def _reinforcement_points(Nx, x, y, addx, where, i, margin):
         x[0], x[-1], Nx
     )  # contains all x (or y) coordinates where points have to be added
     x_cords = np.repeat(
-        x_cords, 2
+        x_cords, len(y) # 2
     )  # doubles every element, because the same x value is added on two y values
     y_cords = np.array(
         y * Nx
@@ -59,7 +59,7 @@ def _reinforcement_points(Nx, x, y, addx, where, i, margin):
     return reinf_tags, i
 
 
-def _reinforcement_lines(reinf_tags):
+def _reinforcement_lines(reinf_tags,x_elems,y_elems):
     '''
     Generates lines that connect the reinforcement nodes.
     '''
@@ -67,14 +67,46 @@ def _reinforcement_lines(reinf_tags):
     ltl = gmsh.model.occ.getEntities(1)[-1][-1]  # "last tag line"
     k = 0
     for i, point_tag in enumerate(reinf_tags):
-        if i % 2 != 0:  # otherwise you will connect all points twice
-            k += 1  # to find the correct tags
-
-            
-            gmsh.model.occ.addLine(reinf_tags[i - 1], point_tag, tag=ltl + k)
+        k += 1  # to find the correct tags
+        #print("y_elems",y_elems)
+        #print("x_elems",x_elems)
+        #print("k",k)
+        if y_elems == k:
+            print("jj")
+        elif k<len(reinf_tags): # below reinf_tags[i+1] is used
+         #   print("line created")
+            #gmsh.model.occ.addLine(reinf_tags[i - 1], point_tag, tag=ltl + k)
+            gmsh.model.occ.addLine(point_tag, reinf_tags[i + 1], tag=ltl + k)
+          #  print("tags",reinf_tags[i - 1], point_tag)
             line_tags.append(ltl + k)
     return line_tags
 
+def _filter_reinfpoints(reinf_tags,n_x,n_y,concrete_elems_x,concrete_elems_y):
+    '''
+    Only keep those points that are needed to create reinforcement lines 
+    '''
+    print("n_x",n_x)
+    print("n_y",n_y)
+    print("concrete_elems_x",concrete_elems_x)
+    print("concrete_elems_y",concrete_elems_y)
+    
+    reinf_tags_filtered = []
+    skip = int(concrete_elems_x/n_x)
+    j = 0
+    count = 1
+    add = 0
+    for i,n in enumerate(range(n_x)):
+        print("maxidx",concrete_elems_y-1+i+i*(concrete_elems_y-1)+add)
+        print("lenreinftags",len(reinf_tags))
+        
+        reinf_tags_filtered.append(reinf_tags[i+i*(concrete_elems_y-1)+add])#(skip-1)*i*(concrete_elems_y-1)
+        reinf_tags_filtered.append(reinf_tags[concrete_elems_y-1+i+i*(concrete_elems_y-1)+add])
+        count+=1
+        if count == skip:
+            #add = concrete_elems_y-2
+            add = 0
+            count = 1
+    return reinf_tags_filtered    
 
 def _create_xdmf(msh_file,xdmf_files):
     '''
@@ -160,17 +192,17 @@ def create_concrete_slab(
     point1 = mymesh.occ.addPoint(x0, y0, z0)
     mymesh.occ.synchronize()
 
-    concrete_elems_x = _num_elems(int((l - 2 * margin) / s), n_x-1)
-    concrete_elems_y = _num_elems(int((w - 2 * margin) / s), n_y-1)
+    concrete_elems_x = _num_elems(int((l - 2 * margin) / s), n_x)#-1
+    concrete_elems_y = _num_elems(int((w - 2 * margin) / s), n_y)
     n_elements_margin = math.ceil(margin/s)
-    
+
     # extrude three times, point -> line (x-direction), line -> rectangle (y-direction), rectangle -> cuboid (z-direction)
     mymesh.occ.extrude(
         [(0, point1)],
         l,
         0,
         0,
-        numElements=[n_elements_margin, concrete_elems_x, n_elements_margin],
+        numElements=[n_elements_margin, concrete_elems_x-2, n_elements_margin], # TODO check if -2 is correct
         heights=[margin / l, 1 - margin / l, 1],
         recombine=True,
     )
@@ -181,7 +213,7 @@ def create_concrete_slab(
         0,
         w,
         0,
-        numElements=[n_elements_margin, concrete_elems_y, n_elements_margin],
+        numElements=[n_elements_margin, concrete_elems_y-2, n_elements_margin], # # TODO check if -2 is correct
         heights=[margin / w, 1 - margin / w, 1],
         recombine=True,
     )
@@ -203,27 +235,30 @@ def create_concrete_slab(
     mymesh.occ.synchronize()
 
     # add points and lines where reinforcement is to be added (depending on n_x and n_y), function is called for x and y separately
-    x = [x0 + margin, l - margin]
-    y = [y0 + margin, w - margin]
+    #x = [x0 + margin, l - margin]
+    #y = [y0 + margin, w - margin]
+    x = list(np.linspace(x0+margin, l-margin,concrete_elems_x-1))
+    y = list(np.linspace(y0+margin, w-margin,concrete_elems_y-1))
     i_points = 0
     
-    print("x",concrete_elems_x)
-    print("y",concrete_elems_y)
+   
     
-    reinf_tags_x, i_points = _reinforcement_points(
-        concrete_elems_x+1, x, y, True, where, i_points, margin
+    reinf_tags, i_points = _reinforcement_points(
+        concrete_elems_x-1, x, y, True, where, i_points, margin
     )  # for reinforcement in x-direction
 
-    reinf_tags_y, i_points = _reinforcement_points(
-      concrete_elems_y+1, y, x, False, where, i_points, margin
-    )  # for y-reinforcement
-    reinf_tags = np.hstack((reinf_tags_x, reinf_tags_y))  # save all reinforcement tags
-    reinf_tags = [int(x) for x in reinf_tags] # make sure that reinf_tags contains only integers, no floats
-    
-    print(reinf_tags)
+    #reinf_tags_y, i_points = _reinforcement_points(
+     # concrete_elems_y+1, y, x, False, where, i_points, margin
+    #)  # for y-reinforcement
+    #reinf_tags = np.hstack((reinf_tags_x, reinf_tags_y))  # save all reinforcement tags
+    #reinf_tags = [int(x) for x in reinf_tags] # make sure that reinf_tags contains only integers, no floats
     
     
-    line_tags = _reinforcement_lines(reinf_tags)
+    #reinf_tags = _filter_reinfpoints(reinf_tags, n_x, n_y, concrete_elems_x, concrete_elems_y)
+    
+    print("reinf_tags_filter",reinf_tags)
+    
+    line_tags = _reinforcement_lines(reinf_tags,concrete_elems_x,concrete_elems_y)
 
     # add new points to mesh by synchronizing
     mymesh.occ.synchronize()
