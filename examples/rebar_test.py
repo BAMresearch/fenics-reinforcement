@@ -21,4 +21,4 @@ parameters = {
 
 
 e = ElasticTrussRebar(concrete_mesh, rebar_mesh, V1, parameters)
-e._assign_dofs()
+e._assign_dofs(1e-4)

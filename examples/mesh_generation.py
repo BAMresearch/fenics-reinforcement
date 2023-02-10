@@ -7,9 +7,9 @@ h = 1 # height
 point1 = [0,0,0]
 point2 = [l,w,h]
 margin=0.25 # minimum distance from the outer edges of the concrete mesh to the reinforcement nodes 
-nx = 1 # reinforcement density (number of rebars) in x direction
-ny=5 # reinforcement density (number of rebars) in y direction
-s_exp = 0.1 # maximal element size
+nx = 2 # reinforcement density (number of rebars) in x direction
+ny=2 # reinforcement density (number of rebars) in y direction
+s_exp = 0.25 # maximal element size
 msh_filename = "test_mesh.msh"
 xdmf_filenames = ["concrete_mesh.xdmf", "rebar_mesh.xdmf"]
 

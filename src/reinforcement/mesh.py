@@ -211,11 +211,11 @@ def create_concrete_slab(
     print("y",concrete_elems_y)
     
     reinf_tags_x, i_points = _reinforcement_points(
-        n_x, x, y, True, where, i_points, margin
+        concrete_elems_x+1, x, y, True, where, i_points, margin
     )  # for reinforcement in x-direction
 
     reinf_tags_y, i_points = _reinforcement_points(
-      n_y, y, x, False, where, i_points, margin
+      concrete_elems_y+1, y, x, False, where, i_points, margin
     )  # for y-reinforcement
     reinf_tags = np.hstack((reinf_tags_x, reinf_tags_y))  # save all reinforcement tags
     reinf_tags = [int(x) for x in reinf_tags] # make sure that reinf_tags contains only integers, no floats

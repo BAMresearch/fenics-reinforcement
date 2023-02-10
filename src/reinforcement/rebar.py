@@ -13,7 +13,7 @@ class RebarInterface(ABC):
         self.function_space = function_space
         self.parameters = parameters
         self.dofs = []
-        self._assign_dofs()
+        #self._assign_dofs()
     
     def _assign_dofs(self, tol = 1e-6):
         # first all reinforcement dofs and their coordinates are found and saved in geometry_entities and points respectively
@@ -35,14 +35,14 @@ class RebarInterface(ABC):
     def _locate_concrete_dofs(self, point, tol):
         x,y,z=point
         def rebar_nodes(var):
-            return np.logical_and(np.logical_and(np.abs(var[1]-y) < tol, np.abs(var[0]-x)<tol), np.abs(var[2]-z<tol))
-        dofs = dfx.fem.locate_dofs_geometrical(self.function_space, rebar_nodes)
+            return np.logical_and(np.logical_and(np.abs(var[1]-y) < tol, np.abs(var[0]-x)<tol), np.abs(var[2]-z)<tol)
+        dofs_toappend = dfx.fem.locate_dofs_geometrical(self.function_space, rebar_nodes)
         try:
-            assert len(dofs) == 1
+            assert len(dofs_toappend) == 1
         except AssertionError:
-            raise Exception(f"{len(dofs)} dofs found at ({x},{y},{z}), expected 1. Try adjusting the tolerance")
+            raise Exception(f"{len(dofs_toappend)} dofs found at ({x},{y},{z}), expected 1. Try adjusting the tolerance")
         
-        return dofs * 3. + np.arange(3, dtype=np.float64)
+        return dofs_toappend * 3. + np.arange(3, dtype=np.float64)
     
     @abstractmethod
     def apply_to_forces(self, f_int, u):
