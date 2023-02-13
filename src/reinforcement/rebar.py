@@ -57,6 +57,10 @@ class ElasticTrussRebar(RebarInterface):
     """
     This class can insert purely elastic rebar stiffnesses into the concrete matrix and the internal forces vector.
     Equations from http://what-when-how.com/the-finite-element-method/fem-for-trusses-finite-element-method-part-1/
+
+    Remark
+    ------
+    The implementation is not very efficient
     """
     def apply_to_stiffness(self,K, u): 
         points = self.function_space.tabulate_dof_coordinates().flatten()
@@ -74,11 +78,12 @@ class ElasticTrussRebar(RebarInterface):
             K_local = T.T @ (AEL * K_1d) @ T
             
             dof_array=np.concatenate((start,end))
-            K.setOption(PETSc.Mat.Option.NEW_NONZERO_ALLOCATION_ERR, False) # otherwise no new values can be added to new entries
+            K.setOption(PETSc.Mat.Option.NEW_NONZERO_ALLOCATION_ERR, False)
             K.setValues(dof_array, dof_array, K_local.flat, addv=PETSc.InsertMode.ADD)
             K.assemble()
-
-    def apply_to_forces(self,f_int, u): 
+    
+    def apply_to_forces(self,f_int, u, sign=1.): 
+        assert sign in [1.,-1.]
         points = self.function_space.tabulate_dof_coordinates().flatten()
         f_1d = np.array([-1.,1.])
         T = np.zeros((2,6))
@@ -87,12 +92,19 @@ class ElasticTrussRebar(RebarInterface):
             delta_x = points[end] - points[start]
             delta_u = u.array[end] - u.array[start]
             l_axial = np.linalg.norm(delta_x, 2)
-            u_axial = np.linalg.norm(delta_x-delta_u, 2)-l_axial
-            matrix_entries = delta_x/l_axial
+
+            matrix_entries = delta_x / l_axial
+            
+            u_axial = np.inner(matrix_entries, delta_u)
+            
+            eps_axial = u_axial/l_axial
+            
             T[0,:3] = matrix_entries    
-            T[1,3:] = matrix_entries    
-            AEL = self.parameters["A"]*self.parameters["E"]/l_axial
-            f_local = T.T @ (AEL * u_axial * f_1d)
+            T[1,3:] = matrix_entries
+
+            sigma_axial = self.parameters["E"] * eps_axial
+            
+            f_local = sign * T.T @ (self.parameters["A"]* sigma_axial * f_1d)
             
             dof_array=np.concatenate((start,end))
             f_int.setValues(dof_array, f_local,addv=PETSc.InsertMode.ADD)

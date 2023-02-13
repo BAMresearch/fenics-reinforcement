@@ -18,8 +18,7 @@ class NonlinearReinforcementProblem(dfx.fem.petsc.NonlinearProblem):
     
     def F(self, x: PETSc.Vec, b: PETSc.Vec):
         super().F(x,b)
-        print("I am in F(x,b)")
-        self.rebar.apply_to_forces(b, x)
+        self.rebar.apply_to_forces(b, x, sign=-1.)
         # The implementation in a real nonlinear case might look a little different
 
     def J(self, x: PETSc.Vec, A: PETSc.Mat):
@@ -161,7 +160,7 @@ boundary_entities_upper = dfx.mesh.locate_entities_boundary(
     ),
 )
 boundary_dofs_upper = dfx.fem.locate_dofs_topological(P1.sub(2), concrete_mesh.topology.dim - 2, boundary_entities_upper)
-bc_upper = dfx.fem.dirichletbc(PETSc.ScalarType(-0.1), boundary_dofs_upper, P1.sub(2))
+bc_upper = dfx.fem.dirichletbc(PETSc.ScalarType(-0.005), boundary_dofs_upper, P1.sub(2))
 
 bcs = [bc_x, bc_y, bc_z, bc_upper]
 
@@ -170,10 +169,11 @@ solver = dfx.nls.petsc.NewtonSolver(concrete_mesh.comm, problem)
 
 # Set Newton solver options
 solver.atol = 1e-8
-solver.rtol = 1e-20
+solver.rtol = 1e-8
 solver.convergence_criterion = "incremental"
 
 tup = solver.solve(u)
+print(tup)
 with dfx.io.XDMFFile( concrete_mesh.comm, "displacements.xdmf", "w") as f:
     f.write_mesh(concrete_mesh)
     f.write_function(u)
