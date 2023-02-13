@@ -8,8 +8,6 @@ from mpi4py import MPI
 from numpy.typing import ArrayLike
 import math
 
-
-
 def _num_elems(min_amount_elems, reinf_elems):
     '''
     Corrects number of concrete elements (defined by s) in order to fit the coice of n_x and n_y.
@@ -21,60 +19,92 @@ def _num_elems(min_amount_elems, reinf_elems):
     else:
         return int(np.ceil(min_amount_elems / reinf_elems)) * reinf_elems
     
-def _reinforcement_points(Nx, x, y, addx, where, i, margin):
+def _reinforcement_points(Nx, Ny, x, y, addx, where, i, margin):
     '''
     Generates reinforcement nodes.
-    '''
-    
+    ''' 
     if where == "upper":
         z = [1 - margin]
     elif where == "lower":
         z = [margin]
     elif where == "both":
         z = [margin, 1 - margin]
-
+        
     reinf_tags = []  # save tags to create lines later
+    reinf_tags_2 = [] # create a second list for the case "both" (makes creating lines later easier)
     ntp = gmsh.model.occ.getEntities(0)[-1][-1] + 1  # "next tag point"
     x_cords = np.linspace(
-        x[0], x[-1], Nx
-    )  # contains all x (or y) coordinates where points have to be added
-    x_cords = np.repeat(
-        x_cords, 2
-    )  # doubles every element, because the same x value is added on two y values
-    y_cords = np.array(
-        y * Nx
-    )  # contains the two y - limits as often as necessary to add all points
+        x[0], x[-1], Nx 
+    )  # contains all x coordinates where points have to be added (lines in y direction)
+
+    y_cords = np.linspace(
+        y[0], y[-1], len(y)
+    )  # contains all y coordinates where points have to be added (lines in y direction)
+
+    x_cords_2 = np.linspace(x[0], x[-1], len(x)) # add additional x coordinates for lines in x direction
+    y_cords_2 = np.linspace(y[0],y[-1],Ny) # additional y coordinates for lines in x direction
     
     for z_cord in z:
-        for (x_cord, y_cord) in zip(x_cords, y_cords):
-            i += 1
-            # check if points for horizontal (x) or vertical (y) lines should be added
-            if addx == True:
+        for x_cord in x_cords:
+            for y_cord in y_cords:
+                i += 1
                 gmsh.model.occ.addPoint(x_cord, y_cord, z_cord, tag=ntp + i)
-
-            else:
-                gmsh.model.occ.addPoint(y_cord, x_cord, z_cord, tag=ntp + i)
-            reinf_tags.append(ntp + i)
+                if z_cord == z[0]:
+                    reinf_tags.append(ntp + i)
+                else:
+                    reinf_tags_2.append(ntp+i)
+        for y_cord in y_cords_2:
+            for x_cord in x_cords_2:
+                i+=1
+                gmsh.model.occ.addPoint(x_cord, y_cord, z_cord, tag=ntp + i)
+                if z_cord == z[0]:
+                    reinf_tags.append(ntp + i)
+                else:
+                    reinf_tags_2.append(ntp+i)
             
-    return reinf_tags, i
+    return reinf_tags, reinf_tags_2, i
 
 
-def _reinforcement_lines(reinf_tags):
+def _reinforcement_lines(reinf_tags,reinf_tags_2,Nx,Ny,elems_x,elems_y):
     '''
     Generates lines that connect the reinforcement nodes.
     '''
     line_tags = []  # save line tags for physical group
     ltl = gmsh.model.occ.getEntities(1)[-1][-1]  # "last tag line"
-    k = 0
-    for i, point_tag in enumerate(reinf_tags):
-        if i % 2 != 0:  # otherwise you will connect all points twice
-            k += 1  # to find the correct tags
-
+    k_tags = 0 # to find the correct tags
+    k_x_or_y = 0 # keep track whether lines are added in x or y direction
+    counter_y = 0
+    counter_x = 0
+    
+    def _create_lines_from_tags(reinf_tags,line_tags,ltl,k_tags,k_x_or_y,counter_y,counter_x):
+        for i, point_tag in enumerate(reinf_tags):
+            k_tags += 1  
+            k_x_or_y += 1 
+            counter_y += 1
             
-            gmsh.model.occ.addLine(reinf_tags[i - 1], point_tag, tag=ltl + k)
-            line_tags.append(ltl + k)
+            if k_x_or_y<len(reinf_tags) - (elems_x+1)*Ny: # create lines in y direction
+                if counter_y == elems_y+1:
+                    counter_y = 0 # do not add line and reset counter
+                    
+                else:
+                    gmsh.model.occ.addLine(point_tag, reinf_tags[i + 1], tag=ltl + k_tags)
+                    line_tags.append(ltl + k_tags)
+            elif k_x_or_y<len(reinf_tags) and k_x_or_y > len(reinf_tags) - (elems_x+1)*Ny: # create lines in x direction
+                counter_x += 1
+               
+                if counter_x == elems_x+1:
+                    counter_x = 0
+                else:
+                    gmsh.model.occ.addLine(point_tag, reinf_tags[i + 1], tag=ltl + k_tags)
+                    line_tags.append(ltl + k_tags)
+        return ltl,k_tags,line_tags 
+    
+    ltl,k_tags,line_tags = _create_lines_from_tags(reinf_tags, line_tags, ltl, k_tags,k_x_or_y, counter_y, counter_x)
+   
+    if len(reinf_tags_2)>0:
+       
+        _,_,line_tags = _create_lines_from_tags(reinf_tags_2, line_tags, ltl, k_tags,k_x_or_y, counter_y, counter_x)
     return line_tags
-
 
 def _create_xdmf(msh_file,xdmf_files):
     '''
@@ -160,17 +190,17 @@ def create_concrete_slab(
     point1 = mymesh.occ.addPoint(x0, y0, z0)
     mymesh.occ.synchronize()
 
-    concrete_elems_x = _num_elems(int((l - 2 * margin) / s), n_x-1)
+    concrete_elems_x = _num_elems(int((l - 2 * margin) / s), n_x-1)#-1
     concrete_elems_y = _num_elems(int((w - 2 * margin) / s), n_y-1)
     n_elements_margin = math.ceil(margin/s)
-    
+
     # extrude three times, point -> line (x-direction), line -> rectangle (y-direction), rectangle -> cuboid (z-direction)
     mymesh.occ.extrude(
         [(0, point1)],
         l,
         0,
         0,
-        numElements=[n_elements_margin, concrete_elems_x, n_elements_margin],
+        numElements=[n_elements_margin, concrete_elems_x, n_elements_margin], 
         heights=[margin / l, 1 - margin / l, 1],
         recombine=True,
     )
@@ -202,41 +232,27 @@ def create_concrete_slab(
     mymesh.addPhysicalGroup(dim=3, tags=[1], tag=1)
     mymesh.occ.synchronize()
 
-    # add points and lines where reinforcement is to be added (depending on n_x and n_y), function is called for x and y separately
-    x = [x0 + margin, l - margin]
-    y = [y0 + margin, w - margin]
+    # add points and lines where reinforcement is to be added 
+    x = list(np.linspace(x0+margin, l-margin,concrete_elems_x+1)) 
+    y = list(np.linspace(y0+margin, w-margin,concrete_elems_y+1)) 
     i_points = 0
-    
-    print("x",concrete_elems_x)
-    print("y",concrete_elems_y)
-    
-    reinf_tags_x, i_points = _reinforcement_points(
-        concrete_elems_x+1, x, y, True, where, i_points, margin
-    )  # for reinforcement in x-direction
+    reinf_tags, reinf_tags_2, i_points = _reinforcement_points(
+        n_x, n_y, x, y, True, where, i_points, margin
+    )  
 
-    reinf_tags_y, i_points = _reinforcement_points(
-      concrete_elems_y+1, y, x, False, where, i_points, margin
-    )  # for y-reinforcement
-    reinf_tags = np.hstack((reinf_tags_x, reinf_tags_y))  # save all reinforcement tags
-    reinf_tags = [int(x) for x in reinf_tags] # make sure that reinf_tags contains only integers, no floats
+    # add lines connecting all reinforcement nodes and save their tags
+    line_tags = _reinforcement_lines(reinf_tags,reinf_tags_2,n_x,n_y,concrete_elems_x,concrete_elems_y) 
     
-    print(reinf_tags)
-    
-    
-    line_tags = _reinforcement_lines(reinf_tags)
-
     # add new points to mesh by synchronizing
     mymesh.occ.synchronize()
-
+    
     # add all reinforcement lines to a physical group
     mymesh.addPhysicalGroup(dim=1, tags=line_tags, tag=1)
     mymesh.occ.synchronize()
-
+    
     # now generate the 3D-mesh
     meshFact = gmsh.model.mesh
-    meshFact.generate(3)
-
-    
+    meshFact.generate(3) 
     
     # Save mesh as msh file
     gmsh.write(msh_filename)
