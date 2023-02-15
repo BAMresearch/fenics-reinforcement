@@ -62,6 +62,27 @@ class ElasticTrussRebar(RebarInterface):
     ------
     The implementation is not very efficient
     """
+    def apply_to_diagonal_mass(self, M):
+        """
+        This method will assume a diagonal Mass matrix. The added entries will be calculated according
+        to Gauß-Lobatto Quadrature
+        """
+        points = self.function_space.tabulate_dof_coordinates().flatten()
+        diagonal_mass_1d = np.array([[1.,0.],[0.,1.]])
+        T = np.zeros((2,6))
+        for dofs in self.dof_array.reshape(-1,6):
+            delta_x = points[dofs[3:]] - points[dofs[:3]]
+            l_axial = np.linalg.norm(delta_x, 2)
+            matrix_entries = delta_x / l_axial
+            
+            T[0,:3] = matrix_entries    
+            T[1,3:] = matrix_entries
+            
+            mass_local =np.diag(T.T @ (self.parameters["rho"]*self.parameters["A"]*l_axial * diagonal_mass_1d) @ T)
+            
+            M.setValues(dofs, mass_local,addv=PETSc.InsertMode.ADD)
+            M.assemble()
+
     def apply_to_stiffness(self,K, u): 
         points = self.function_space.tabulate_dof_coordinates().flatten()
         K_1d = np.array([[1.,-1.],[-1.,1.]])
