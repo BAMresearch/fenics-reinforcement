@@ -47,7 +47,7 @@ point1 = [0., 0., 0.]
 point2 = [length, width, height]
 
 margin = (3 * ureg.centimeter).to_base_units().magnitude
-nx = 1
+nx = 0
 ny = 2
 h = (3 * ureg.centimeter).to_base_units().magnitude
 msh_filename = "test_mesh.msh"
