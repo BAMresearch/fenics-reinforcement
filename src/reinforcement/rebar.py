@@ -66,9 +66,8 @@ class ElasticTrussRebar(RebarInterface):
         points = self.function_space.tabulate_dof_coordinates().flatten()
         K_1d = np.array([[1.,-1.],[-1.,1.]])
         T = np.zeros((2,6))
-        for i, _ in enumerate(self.dof_array[::2]):
-            start, end = self.dof_array[i], self.dof_array[i+1]
-            delta_x = points[end] - points[start]
+        for dofs in self.dof_array.reshape(-1,6):
+            delta_x = points[dofs[3:]] - points[dofs[:3]]
             l_axial = np.linalg.norm(delta_x, 2)
             
             matrix_entries = delta_x/l_axial
@@ -77,9 +76,8 @@ class ElasticTrussRebar(RebarInterface):
             AEL = self.parameters["A"]*self.parameters["E"]/l_axial
             K_local = T.T @ (AEL * K_1d) @ T
             
-            dof_array=np.concatenate((start,end))
             K.setOption(PETSc.Mat.Option.NEW_NONZERO_ALLOCATION_ERR, False)
-            K.setValues(dof_array, dof_array, K_local.flat, addv=PETSc.InsertMode.ADD)
+            K.setValues(dofs, dofs, K_local.flat, addv=PETSc.InsertMode.ADD)
             K.assemble()
     
     def apply_to_forces(self,f_int, u, sign=1.): 
@@ -87,12 +85,10 @@ class ElasticTrussRebar(RebarInterface):
         points = self.function_space.tabulate_dof_coordinates().flatten()
         f_1d = np.array([-1.,1.])
         T = np.zeros((2,6))
-        for i, _ in enumerate(self.dof_array[::2]):
-            start, end = self.dof_array[i], self.dof_array[i+1]
-            delta_x = points[end] - points[start]
-            delta_u = u.array[end] - u.array[start]
+        for dofs in self.dof_array.reshape(-1,6):
+            delta_x = points[dofs[3:]] - points[dofs[:3]]
+            delta_u = u.array[dofs[3:]] - u.array[dofs[:3]]
             l_axial = np.linalg.norm(delta_x, 2)
-
             matrix_entries = delta_x / l_axial
             
             u_axial = np.inner(matrix_entries, delta_u)
@@ -106,8 +102,7 @@ class ElasticTrussRebar(RebarInterface):
             
             f_local = sign * T.T @ (self.parameters["A"]* sigma_axial * f_1d)
             
-            dof_array=np.concatenate((start,end))
-            f_int.setValues(dof_array, f_local,addv=PETSc.InsertMode.ADD)
+            f_int.setValues(dofs, f_local,addv=PETSc.InsertMode.ADD)
             f_int.assemble()
 
         
