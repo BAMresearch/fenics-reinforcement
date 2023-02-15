@@ -7,6 +7,7 @@ import dolfinx as dfx
 from mpi4py import MPI
 from numpy.typing import ArrayLike
 import math
+from itertools import product
 
 def _num_elems(min_amount_elems, reinf_elems):
     '''
@@ -19,17 +20,13 @@ def _num_elems(min_amount_elems, reinf_elems):
     else:
         return int(np.ceil(min_amount_elems / reinf_elems)) * reinf_elems
     
-def _reinforcement_points(Nx, Ny, x, y, addx, where, i, margin):
+def _reinforcement_points(Nx, Ny, x, y, addx, z, margin):
     '''
     Generates reinforcement nodes.
     ''' 
-    if where == "upper":
-        z = [1 - margin]
-    elif where == "lower":
-        z = [margin]
-    elif where == "both":
-        z = [margin, 1 - margin]
-        
+
+    
+    i = 0
     reinf_tags = []  # save tags to create lines later
     reinf_tags_2 = [] # create a second list for the case "both" (makes creating lines later easier)
     ntp = gmsh.model.occ.getEntities(0)[-1][-1] + 1  # "next tag point"
@@ -44,25 +41,28 @@ def _reinforcement_points(Nx, Ny, x, y, addx, where, i, margin):
     x_cords_2 = np.linspace(x[0], x[-1], len(x)) # add additional x coordinates for lines in x direction
     y_cords_2 = np.linspace(y[0],y[-1],Ny) # additional y coordinates for lines in x direction
     
+   
+    # TODO fix x_cord_2, y_cord_2 -> all in one loop or two separate loops?
     for z_cord in z:
-        for x_cord in x_cords:
-            for y_cord in y_cords:
-                i += 1
-                gmsh.model.occ.addPoint(x_cord, y_cord, z_cord, tag=ntp + i)
-                if z_cord == z[0]:
-                    reinf_tags.append(ntp + i)
-                else:
-                    reinf_tags_2.append(ntp+i)
-        for y_cord in y_cords_2:
-            for x_cord in x_cords_2:
-                i+=1
-                gmsh.model.occ.addPoint(x_cord, y_cord, z_cord, tag=ntp + i)
-                if z_cord == z[0]:
-                    reinf_tags.append(ntp + i)
-                else:
-                    reinf_tags_2.append(ntp+i)
+       for x_cord in x_cords:
+           for y_cord in y_cords:
+               i += 1
+               gmsh.model.occ.addPoint(x_cord, y_cord, z_cord, tag=ntp + i)
+               if z_cord == z[0]:
+                   reinf_tags.append(ntp + i)
+               else:
+                   reinf_tags_2.append(ntp+i)
+       for y_cord in y_cords_2:
+           for x_cord in x_cords_2:
+               i+=1
+               gmsh.model.occ.addPoint(x_cord, y_cord, z_cord, tag=ntp + i)
+               if z_cord == z[0]:
+                   reinf_tags.append(ntp + i)
+               else:
+                   reinf_tags_2.append(ntp+i)
+
             
-    return reinf_tags, reinf_tags_2, i
+    return reinf_tags, reinf_tags_2
 
 
 def _reinforcement_lines(reinf_tags,reinf_tags_2,Nx,Ny,elems_x,elems_y):
@@ -140,7 +140,7 @@ def create_concrete_slab(
     s: float,
     msh_filename: str,
     xdmf_filenames: list,
-    where="both",
+    z: list,
 ):
     """
     This function creates a 3D-quadrilateral mesh in the shape of a cuboid with reinforcement
@@ -168,9 +168,8 @@ def create_concrete_slab(
         Filename of the mesh (msh file).
     xdmf_filenames : list
         Desired names of the two xdmf meshes (concrete & reinforcement).
-    where: str
-        Position of the reinforecement bars. Valid options are "upper", "lower"
-        and "both".
+    z: list
+        Position of the reinforecement bar(s). The list may contain either one or two floats, dictating whether one or two reinforcement bars should be created. The float represents the z-coordinate of the bar(s)
 
     Returns
     -------
@@ -185,15 +184,29 @@ def create_concrete_slab(
 
     # alias to facilitate code writing
     mymesh = gmsh.model
-    gmsh.option.setNumber("Mesh.CharacteristicLengthMin",100)
+    gmsh.option.setNumber("Mesh.CharacteristicLengthMin",100000)
     # create the first point
     point1 = mymesh.occ.addPoint(x0, y0, z0)
     mymesh.occ.synchronize()
 
-    concrete_elems_x = _num_elems(int((l - 2 * margin) / s), n_x-1)#-1
+    concrete_elems_x = _num_elems(int((l - 2 * margin) / s), n_x-1)
     concrete_elems_y = _num_elems(int((w - 2 * margin) / s), n_y-1)
     n_elements_margin = math.ceil(margin/s)
-
+    
+    # evaluate z, find correct margins and amount of elements in z-direction
+    if len(z) == 2 :
+        n_elements_margin_z_1 = math.ceil(z[0]/s)
+        n_elements_margin_z_2 = math.ceil((1-z[1])/s)
+        heights_z = [z[0]/h, z[1]/h, 1]
+        numElements_z = [n_elements_margin_z_1, int((h - (z[0]+(1-z[1]))) / s), n_elements_margin_z_2]
+        
+    elif len(z) == 1:
+        n_elements_margin_z_1 = math.ceil(z[0]/s)
+        n_elements_margin_z_2 = math.ceil((1-z[0])/s)
+        heights_z = [z[0]/h,1]
+        numElements_z = [n_elements_margin_z_1,n_elements_margin_z_2]
+        
+        
     # extrude three times, point -> line (x-direction), line -> rectangle (y-direction), rectangle -> cuboid (z-direction)
     mymesh.occ.extrude(
         [(0, point1)],
@@ -222,22 +235,22 @@ def create_concrete_slab(
         0,
         0,
         h,
-        numElements=[n_elements_margin, int((h - 2 * margin) / s), n_elements_margin],
-        heights=[margin / h, 1 - margin / h, 1],
+        numElements=numElements_z,
+        heights=heights_z,
         recombine=True,
-    )
+    ) 
     mymesh.occ.synchronize()
 
+    
     # add volume as physical group
     mymesh.addPhysicalGroup(dim=3, tags=[1], tag=1)
     mymesh.occ.synchronize()
 
     # add points and lines where reinforcement is to be added 
-    x = list(np.linspace(x0+margin, l-margin,concrete_elems_x+1)) 
-    y = list(np.linspace(y0+margin, w-margin,concrete_elems_y+1)) 
-    i_points = 0
-    reinf_tags, reinf_tags_2, i_points = _reinforcement_points(
-        n_x, n_y, x, y, True, where, i_points, margin
+    x = np.linspace(x0+margin, l-margin,concrete_elems_x+1) 
+    y = np.linspace(y0+margin, w-margin,concrete_elems_y+1)
+    reinf_tags, reinf_tags_2 = _reinforcement_points(
+        n_x, n_y, x, y, True, z, margin
     )  
 
     # add lines connecting all reinforcement nodes and save their tags
