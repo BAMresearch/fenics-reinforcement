@@ -196,13 +196,13 @@ def create_concrete_slab(
     # evaluate z, find correct margins and amount of elements in z-direction
     if len(z) == 2 :
         n_elements_margin_z_1 = math.ceil(z[0]/s)
-        n_elements_margin_z_2 = math.ceil((1-z[1])/s)
+        n_elements_margin_z_2 = math.ceil((h-z[1])/s)
         heights_z = [z[0]/h, z[1]/h, 1]
-        numElements_z = [n_elements_margin_z_1, int((h - (z[0]+(1-z[1]))) / s), n_elements_margin_z_2]
+        numElements_z = [n_elements_margin_z_1, int((h - (z[0]+(h-z[1]))) / s), n_elements_margin_z_2]
         
     elif len(z) == 1:
         n_elements_margin_z_1 = math.ceil(z[0]/s)
-        n_elements_margin_z_2 = math.ceil((1-z[0])/s)
+        n_elements_margin_z_2 = math.ceil((h-z[0])/s)
         heights_z = [z[0]/h,1]
         numElements_z = [n_elements_margin_z_1,n_elements_margin_z_2]
         
