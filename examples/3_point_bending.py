@@ -50,12 +50,13 @@ margin = (3 * ureg.centimeter).to_base_units().magnitude
 nx = 0
 ny = 2
 h = (3 * ureg.centimeter).to_base_units().magnitude
+z_rebar = (5*ureg.centimeter).to_base_units().magnitude
 msh_filename = "test_mesh.msh"
 xdmf_filenames = ["concrete_mesh.xdmf", "rebar_mesh.xdmf"]
 
 
 create_concrete_slab(
-    point1, point2, nx, ny, margin, h, msh_filename, xdmf_filenames, where="lower"
+    point1, point2, nx, ny, margin, h, msh_filename, xdmf_filenames, z=[z_rebar]
 )
 
 concrete_mesh, rebar_mesh = read_xdmf(xdmf_filenames)
