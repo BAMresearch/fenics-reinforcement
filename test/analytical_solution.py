@@ -7,7 +7,8 @@ Created on Mon Feb 20 14:10:15 2023
 """
 
 from test_analytical_solution import analytical_solution
-# example (no real values)
+
+#example on how to derive an analytical solution for the three-point bending test
 q0 = 10
 B = 1
 H = 2
