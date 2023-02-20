@@ -8,6 +8,30 @@ from pint import UnitRegistry
 
 ureg = UnitRegistry()
 
+parameters_steel = {
+    "E": (210. * ureg.gigapascal).to_base_units().magnitude,
+    "nu": 0.3,
+    "A": (np.pi * (0.75 * ureg.centimeters)**2).to_base_units().magnitude,
+    }
+parameters_concrete = {
+    "E": (25 * ureg.gigapascal).to_base_units().magnitude,
+    "nu": 0.3,
+    }
+
+
+length = (2 * ureg.meter).to_base_units().magnitude
+width = (30 * ureg.centimeter).to_base_units().magnitude 
+height = (30 * ureg.centimeter).to_base_units().magnitude
+
+force = (50 * ureg.kilonewton).to_base_units().magnitude
+pressure = force / (length*width)
+
+point1 = [0., 0., 0.]
+point2 = [length, width, height]
+
+margin = (3 * ureg.centimeter).to_base_units().magnitude
+z_rebar = (5*ureg.centimeter).to_base_units().magnitude
+
 class NonlinearReinforcementProblem(dfx.fem.petsc.NonlinearProblem):
     """
     This class demonstrates how the reinforcement could be used in a nonlinear problem.
@@ -27,32 +51,9 @@ class NonlinearReinforcementProblem(dfx.fem.petsc.NonlinearProblem):
         # The implementation in a real nonlinear case might look a little different
 
 def rebar_problem(n):
-    parameters_steel = {
-        "E": (210. * ureg.gigapascal).to_base_units().magnitude,
-        "nu": 0.3,
-        "A": (np.pi * (0.75 * ureg.centimeters)**2).to_base_units().magnitude,
-        }
-    parameters_concrete = {
-        "E": (25 * ureg.gigapascal).to_base_units().magnitude,
-        "nu": 0.3,
-        }
-
-
-    length = (2 * ureg.meter).to_base_units().magnitude
-    width = (30 * ureg.centimeter).to_base_units().magnitude 
-    height = (30 * ureg.centimeter).to_base_units().magnitude
-
-    force = (50 * ureg.kilonewton).to_base_units().magnitude
-    pressure = force / (length*width)
-
-    point1 = [0., 0., 0.]
-    point2 = [length, width, height]
-
-    margin = (3 * ureg.centimeter).to_base_units().magnitude
     nx = 0
     ny = n
     h = (3 * ureg.centimeter).to_base_units().magnitude
-    z_rebar = (5*ureg.centimeter).to_base_units().magnitude
     msh_filename = "test_mesh.msh"
     xdmf_filenames = ["concrete_mesh.xdmf", "rebar_mesh.xdmf"]
 

@@ -33,12 +33,12 @@ class analytical_solution:
         -------
 
         '''
-        E_s = params_rebar["Youngs_Modulus_steel"]
-        rho_s = params_rebar["density_steel"]
+        E_s = params_rebar["E"]
+        rho_s = params_rebar["rho"]
         i = params_rebar["amount"]
-        A_r = params_rebar["area"]
-        E_c = params_concrete["Youngs_Modulus_concrete"]
-        rho_c = params_concrete["density_concrete"]
+        A_r = params_rebar["A"]
+        E_c = params_concrete["E"]
+        rho_c = params_concrete["rho"]
         V_c = B*H*L
         V_s = i*A_r*L
         zg = (rho_c*V_c*H/2 + rho_s*V_s*zr) / (rho_c*V_c + rho_s*V_s)
