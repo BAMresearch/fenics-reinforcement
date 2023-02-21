@@ -5,6 +5,7 @@ import ufl
 import numpy as np
 from petsc4py import PETSc
 from pint import UnitRegistry
+from analytical_solution import analytical_solution
 
 ureg = UnitRegistry()
 
@@ -12,10 +13,13 @@ parameters_steel = {
     "E": (210. * ureg.gigapascal).to_base_units().magnitude,
     "nu": 0.3,
     "A": (np.pi * (0.75 * ureg.centimeters)**2).to_base_units().magnitude,
+    "rho":(7850 * ureg.kilogram/ureg.meter**3).to_base_units().magnitude,
+    "amount":0,
     }
 parameters_concrete = {
     "E": (25 * ureg.gigapascal).to_base_units().magnitude,
     "nu": 0.3,
+    "rho": (2.4*ureg.gram/ureg.centimeter**3).to_base_units().magnitude,
     }
 
 
@@ -41,19 +45,22 @@ class NonlinearReinforcementProblem(dfx.fem.petsc.NonlinearProblem):
         self.rebar = rebar
     
     def F(self, x: PETSc.Vec, b: PETSc.Vec):
+        print("I am in F")
         super().F(x,b)
-        self.rebar.apply_to_forces(b, x, sign=-1.)
+        #self.rebar.apply_to_forces(b, x, sign=-1.)
         # The implementation in a real nonlinear case might look a little different
 
     def J(self, x: PETSc.Vec, A: PETSc.Mat):
+        print("I am in J")
         super().J(x,A)
-        self.rebar.apply_to_stiffness(A, x)
+        #self.rebar.apply_to_stiffness(A, x)
         # The implementation in a real nonlinear case might look a little different
+    
 
 def rebar_problem(n):
     nx = 0
     ny = n
-    h = (3 * ureg.centimeter).to_base_units().magnitude
+    h = (2 * ureg.centimeter).to_base_units().magnitude
     msh_filename = "test_mesh.msh"
     xdmf_filenames = ["concrete_mesh.xdmf", "rebar_mesh.xdmf"]
 
@@ -180,7 +187,7 @@ def test_rebar():
         solver = dfx.nls.petsc.NewtonSolver(mesh.comm, problem)
         # Set Newton solver options
         solver.atol = 1.
-        solver.rtol = 1e-8
+        solver.rtol = 1e-4
         solver.convergence_criterion = "incremental"
 
         _ = solver.solve(u)
@@ -190,14 +197,25 @@ def test_rebar():
         assert False
 
 if __name__=="__main__":
+    import matplotlib.pyplot as plt
+    import matplotlib
+    matplotlib.use("Agg", force=True)
     print(__name__)
     problem, mesh, u = rebar_problem(2)
+    solution_analytical = analytical_solution(force/length, length, height, width, z_rebar, parameters_steel, parameters_concrete)
     solver = dfx.nls.petsc.NewtonSolver(mesh.comm, problem)
+    sensor = DisplacementAtDofSensor(u, lambda x : np.logical_and(np.isclose(x[1],0.15),np.isclose(x[2],0.)))
     
     solver.atol = 1.
     solver.rtol = 1e-8
     solver.convergence_criterion = "incremental"
     _ = solver.solve(u)
+    solution_fem = sensor()
+    plt.plot(sensor.x[:,0],-solution_fem[:,2], label="FEM")
+    plt.plot(sensor.x[:,0],solution_analytical.evaluate(sensor.x[:,0]), label ="Analytical")
+    plt.legend()
+    plt.yscale("log")
+    plt.savefig("fem_solution.png")
 
     with dfx.io.XDMFFile(mesh.comm, "displacements.xdmf", "w") as f:
         f.write_mesh(mesh)

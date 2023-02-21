@@ -14,11 +14,14 @@ from pint import UnitRegistry
 ureg = UnitRegistry()
 #example on how to derive an analytical solution for the three-point bending test
 force = (50*ureg.kilonewton).to_base_units().magnitude
-B = 0.3
-H = 0.3
-L = 2.
-q0 = force / L
-zr = 0.05
+B = (2 * ureg.meter).to_base_units().magnitude
+L = (30 * ureg.centimeter).to_base_units().magnitude 
+H = (30 * ureg.centimeter).to_base_units().magnitude
+#B = 2.
+#H = 0.3
+#L = 0.3
+q0 = force  
+zr = (5*ureg.centimeter).to_base_units().magnitude
 #params_rebar = {"Youngs_Modulus_steel":10, "density_steel":5, "amount": 2, "area":3}
 #params_concrete = {"Youngs_Modulus_concrete":5,"density_concrete":3}
 parameters_steel = {
@@ -26,7 +29,7 @@ parameters_steel = {
     "nu": 0.3,
     "A": (np.pi * (0.75 * ureg.centimeters)**2).to_base_units().magnitude,
     "rho":(7850 * ureg.kilogram/ureg.meter**3).to_base_units().magnitude,
-    "amount":4,
+    "amount":0,
     }
 parameters_concrete = {
     "E": (25 * ureg.gigapascal).to_base_units().magnitude,
@@ -34,8 +37,9 @@ parameters_concrete = {
     "rho": (2.4*ureg.gram/ureg.centimeter**3).to_base_units().magnitude,
     }
 y0 = 0.5
-y = np.linspace(0.,L,100)
+y = np.linspace(0.,B,100)
 example = analytical_solution(q0,B,H,L,zr,parameters_steel,parameters_concrete)
 w = example.evaluate(y)
+print(max(w))
 plt.plot(y,w)
 plt.show()
