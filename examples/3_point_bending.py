@@ -5,6 +5,7 @@ import ufl
 import numpy as np
 from petsc4py import PETSc
 from pint import UnitRegistry
+# TODO: make this example more useful
 
 ureg = UnitRegistry()
 
@@ -18,7 +19,7 @@ class NonlinearReinforcementProblem(dfx.fem.petsc.NonlinearProblem):
     
     def F(self, x: PETSc.Vec, b: PETSc.Vec):
         super().F(x,b)
-        self.rebar.apply_to_forces(b, x, sign=-1.)
+        self.rebar.apply_to_forces(b, x)
         # The implementation in a real nonlinear case might look a little different
 
     def J(self, x: PETSc.Vec, A: PETSc.Mat):
