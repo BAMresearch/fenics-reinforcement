@@ -14,7 +14,7 @@ parameters_steel = {
     "nu": 0.3,
     "A": (np.pi * (0.75 * ureg.centimeters)**2).to_base_units().magnitude,
     "rho":(7850 * ureg.kilogram/ureg.meter**3).to_base_units().magnitude,
-    "amount":0,
+    "amount":2,
     }
 parameters_concrete = {
     "E": (25 * ureg.gigapascal).to_base_units().magnitude,
@@ -22,6 +22,24 @@ parameters_concrete = {
     "rho": (2.4*ureg.gram/ureg.centimeter**3).to_base_units().magnitude,
     }
 
+class NonlinearReinforcementProblem(dfx.fem.petsc.NonlinearProblem):
+    """
+    This class demonstrates how the reinforcement could be used in a nonlinear problem.
+    """
+    def __init__(self, R, dR, u, rebar, bcs = [], form_compiler_params={}, jit_params={}):
+        super().__init__(R, u, bcs, dR,form_compiler_params, jit_params)
+        self.rebar = rebar
+    
+    def F(self, x: PETSc.Vec, b: PETSc.Vec):
+        super().F(x,b)
+        self.rebar.apply_to_forces(b, x)
+        # The implementation in a real nonlinear case might look a little different
+
+    def J(self, x: PETSc.Vec, A: PETSc.Mat):
+        super().J(x,A)
+        self.rebar.apply_to_stiffness(A, x)
+        # The implementation in a real nonlinear case might look a little different
+    
 
 length = (2 * ureg.meter).to_base_units().magnitude
 width = (30 * ureg.centimeter).to_base_units().magnitude 
@@ -36,26 +54,6 @@ point2 = [length, width, height]
 margin = (3 * ureg.centimeter).to_base_units().magnitude
 z_rebar = (5*ureg.centimeter).to_base_units().magnitude
 
-class NonlinearReinforcementProblem(dfx.fem.petsc.NonlinearProblem):
-    """
-    This class demonstrates how the reinforcement could be used in a nonlinear problem.
-    """
-    def __init__(self, R, dR, u, rebar, bcs = [], form_compiler_params={}, jit_params={}):
-        super().__init__(R, u, bcs, dR,form_compiler_params, jit_params)
-        self.rebar = rebar
-    
-    def F(self, x: PETSc.Vec, b: PETSc.Vec):
-        print("I am in F")
-        super().F(x,b)
-        #self.rebar.apply_to_forces(b, x, sign=-1.)
-        # The implementation in a real nonlinear case might look a little different
-
-    def J(self, x: PETSc.Vec, A: PETSc.Mat):
-        print("I am in J")
-        super().J(x,A)
-        #self.rebar.apply_to_stiffness(A, x)
-        # The implementation in a real nonlinear case might look a little different
-    
 
 def rebar_problem(n):
     nx = 0
@@ -116,9 +114,9 @@ def rebar_problem(n):
     ds = ufl.Measure("ds", domain=concrete_mesh, subdomain_data=facet_tag)
 
 
-    external_force_form = pressure * ufl.dot(ufl.FacetNormal(concrete_mesh), v_) * ds(42)
+    external_force_form = - pressure * ufl.dot(ufl.FacetNormal(concrete_mesh), v_) * ds(42)
     internal_force_form = ufl.inner(eps(v_), sigma(u, parameters_concrete)) * ufl.dx
-    residual =   external_force_form-internal_force_form
+    residual =   -(external_force_form-internal_force_form)
 
     # right side
     def left(x):
@@ -166,6 +164,7 @@ def rebar_problem(n):
     bcs = [bc_x, bc_y, bc_z]
 
     problem = NonlinearReinforcementProblem(residual, a, u, rebar, bcs)
+
     return problem, concrete_mesh, u
 
 class DisplacementAtDofSensor:
@@ -183,18 +182,23 @@ def test_rebar():
     for i in range(2,11):
         print(i)
         problem, mesh, u = rebar_problem(i)
-        sensor = DisplacementAtDofSensor(u, lambda x : np.logical_and(np.isclose(x[0],15.),np.isclose(x[2],0.)))
+        sensor = DisplacementAtDofSensor(u, lambda x : np.logical_and(np.isclose(x[1],0.15),np.isclose(x[2],0.)))
         solver = dfx.nls.petsc.NewtonSolver(mesh.comm, problem)
         # Set Newton solver options
-        solver.atol = 1.
-        solver.rtol = 1e-4
-        solver.convergence_criterion = "incremental"
-
+        solver.atol = 1e-8
+        solver.rtol = 1e-8
+        solver.convergence_criterion = "residual"
         _ = solver.solve(u)
 
-        solution_fem = sensor()
+        parameters_steel["amount"] = i 
+        solution_analytical = analytical_solution(force/length, length, height, width, z_rebar, parameters_steel, parameters_concrete)
 
-        assert False
+        solution_fem = sensor()
+        solution_ana = solution_analytical.evaluate(sensor.x[:,0])
+        max_error= np.max(np.abs(-solution_fem[:,2]-solution_ana))
+
+        max_rel_error = max_error/np.max(np.abs(solution_ana))
+        assert max_rel_error < 1e-2
 
 if __name__=="__main__":
     import matplotlib.pyplot as plt
@@ -206,15 +210,17 @@ if __name__=="__main__":
     solver = dfx.nls.petsc.NewtonSolver(mesh.comm, problem)
     sensor = DisplacementAtDofSensor(u, lambda x : np.logical_and(np.isclose(x[1],0.15),np.isclose(x[2],0.)))
     
-    solver.atol = 1.
+    solver.atol = 1e-8
     solver.rtol = 1e-8
-    solver.convergence_criterion = "incremental"
+    solver.convergence_criterion = "residual"
+    solver.report = True
+    dfx.log.set_log_level(dfx.log.LogLevel.INFO)
     _ = solver.solve(u)
     solution_fem = sensor()
     plt.plot(sensor.x[:,0],-solution_fem[:,2], label="FEM")
     plt.plot(sensor.x[:,0],solution_analytical.evaluate(sensor.x[:,0]), label ="Analytical")
     plt.legend()
-    plt.yscale("log")
+    #plt.yscale("log")
     plt.savefig("fem_solution.png")
 
     with dfx.io.XDMFFile(mesh.comm, "displacements.xdmf", "w") as f:
