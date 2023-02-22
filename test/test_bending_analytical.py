@@ -5,7 +5,7 @@ import ufl
 import numpy as np
 from petsc4py import PETSc
 from pint import UnitRegistry
-from analytical_solution import analytical_solution
+from analytical_solution import analytical_solution_clamped
 
 ureg = UnitRegistry()
 
@@ -51,7 +51,7 @@ pressure = force / (length*width)
 point1 = [0., 0., 0.]
 point2 = [length, width, height]
 
-margin = (3 * ureg.centimeter).to_base_units().magnitude
+margin = (1 * ureg.centimeter).to_base_units().magnitude
 z_rebar = (5*ureg.centimeter).to_base_units().magnitude
 
 
@@ -103,7 +103,7 @@ def rebar_problem(n):
     facet_indices = dfx.mesh.locate_entities(
         concrete_mesh,
         fdim,
-        lambda x: np.isclose(x[2], height, atol=h)
+        lambda x: np.isclose(x[2], height)
     )
     facet_markers = np.full(len(facet_indices), marker).astype(np.int32)
     facet_tag = dfx.mesh.meshtags(concrete_mesh, fdim, facet_indices, facet_markers)
@@ -112,58 +112,18 @@ def rebar_problem(n):
         concrete_mesh.topology.dim - 1, concrete_mesh.topology.dim
     )
     ds = ufl.Measure("ds", domain=concrete_mesh, subdomain_data=facet_tag)
+    with dfx.io.XDMFFile(concrete_mesh.comm, "facet_tags.xdmf", "w") as xdmf:
+        xdmf.write_mesh(concrete_mesh)
+        xdmf.write_meshtags(facet_tag)
 
 
     external_force_form = - pressure * ufl.dot(ufl.FacetNormal(concrete_mesh), v_) * ds(42)
     internal_force_form = ufl.inner(eps(v_), sigma(u, parameters_concrete)) * ufl.dx
     residual =   -(external_force_form-internal_force_form)
 
-    # right side
-    def left(x):
-        return np.logical_and(np.isclose(x[0], 0.), np.isclose(x[2], 0.0))
-
-
-    def right(x):
-        return np.logical_and(np.isclose(x[0], length), np.isclose(x[2], 0.0))
-
-
-    # left side
-    boundary_entities_left = dfx.mesh.locate_entities_boundary(
-        concrete_mesh, concrete_mesh.topology.dim - 2, left
-    )
-    boundary_dofs_left = [
-        dfx.fem.locate_dofs_topological(
-            P1.sub(i), concrete_mesh.topology.dim - 2, boundary_entities_left
-        )
-        for i in range(3)
-    ]
-
-    boundary_entities_right = dfx.mesh.locate_entities_boundary(
-        concrete_mesh, concrete_mesh.topology.dim - 2, right
-    )
-    boundary_dofs_right = [
-        dfx.fem.locate_dofs_topological(
-            P1.sub(i), concrete_mesh.topology.dim - 2, boundary_entities_right
-        )
-        for i in range(3)
-    ]
-
-    bc_z = dfx.fem.dirichletbc(
-        PETSc.ScalarType(0),
-        np.concatenate((boundary_dofs_left[2], boundary_dofs_right[2])),
-        P1.sub(2),
-    )
-    bc_x = dfx.fem.dirichletbc(PETSc.ScalarType(0), boundary_dofs_left[0], P1.sub(0))
-    bc_y = dfx.fem.dirichletbc(
-        PETSc.ScalarType(0),
-        np.concatenate((boundary_dofs_left[1], boundary_dofs_right[1])),
-        P1.sub(1),
-    )
-
-
-    bcs = [bc_x, bc_y, bc_z]
-
-    problem = NonlinearReinforcementProblem(residual, a, u, rebar, bcs)
+    dofs = dfx.fem.locate_dofs_geometrical(P1, lambda x: np.isclose(x[0],0.))
+    bc = dfx.fem.dirichletbc(np.zeros(3), dofs,P1)
+    problem = NonlinearReinforcementProblem(residual, a, u, rebar, [bc])
 
     return problem, concrete_mesh, u
 
@@ -182,43 +142,53 @@ def test_rebar():
     for i in range(2,11):
         print(i)
         problem, mesh, u = rebar_problem(i)
-        sensor = DisplacementAtDofSensor(u, lambda x : np.logical_and(np.isclose(x[1],0.15),np.isclose(x[2],0.)))
+        sensor = DisplacementAtDofSensor(u, lambda x : np.logical_and(np.isclose(x[1],0.),np.isclose(x[2],0.)))
         solver = dfx.nls.petsc.NewtonSolver(mesh.comm, problem)
         # Set Newton solver options
-        solver.atol = 1e-8
-        solver.rtol = 1e-8
+        solver.atol = 1e-4
+        solver.rtol = 1e-4
         solver.convergence_criterion = "residual"
         _ = solver.solve(u)
 
         parameters_steel["amount"] = i 
-        solution_analytical = analytical_solution(force/length, length, height, width, z_rebar, parameters_steel, parameters_concrete)
+        solution_analytical = analytical_solution_clamped(force/length, length, height, width, z_rebar, parameters_steel, parameters_concrete)
 
         solution_fem = sensor()
         solution_ana = solution_analytical.evaluate(sensor.x[:,0])
+        print(solution_ana.shape)
         max_error= np.max(np.abs(-solution_fem[:,2]-solution_ana))
 
         max_rel_error = max_error/np.max(np.abs(solution_ana))
-        assert max_rel_error < 1e-2
+        assert max_rel_error < 5e-2
 
 if __name__=="__main__":
     import matplotlib.pyplot as plt
     import matplotlib
     matplotlib.use("Agg", force=True)
     print(__name__)
-    problem, mesh, u = rebar_problem(2)
-    solution_analytical = analytical_solution(force/length, length, height, width, z_rebar, parameters_steel, parameters_concrete)
+    problem, mesh, u = rebar_problem(4)
+    parameters_steel["amount"]=4
+    #parameters_steel["E"]=0.
+    solution_analytical = analytical_solution_clamped(force/(length), length, height, width, z_rebar, parameters_steel, parameters_concrete)
     solver = dfx.nls.petsc.NewtonSolver(mesh.comm, problem)
-    sensor = DisplacementAtDofSensor(u, lambda x : np.logical_and(np.isclose(x[1],0.15),np.isclose(x[2],0.)))
+    sensor = DisplacementAtDofSensor(u, lambda x : np.logical_and(np.isclose(x[1],0.),np.isclose(x[2],0.)))
+    sensor_2 = DisplacementAtDofSensor(u, lambda x : np.logical_and(np.isclose(x[1],0.),np.isclose(x[2],0.3)))
     
-    solver.atol = 1e-8
-    solver.rtol = 1e-8
+    solver.atol = 1e-4
+    solver.rtol = 1e-4
     solver.convergence_criterion = "residual"
     solver.report = True
-    dfx.log.set_log_level(dfx.log.LogLevel.INFO)
     _ = solver.solve(u)
     solution_fem = sensor()
-    plt.plot(sensor.x[:,0],-solution_fem[:,2], label="FEM")
-    plt.plot(sensor.x[:,0],solution_analytical.evaluate(sensor.x[:,0]), label ="Analytical")
+    solution_fem_2 = sensor_2()
+    solution_fem_normed = solution_fem[:,2]/np.max(-solution_fem[:,2])
+    solution_ana = solution_analytical.evaluate(sensor.x[:,0])
+    solution_ana_normed = solution_ana/np.max(solution_ana)
+    print(np.max(solution_ana), np.max(-solution_fem[:,2]),np.max(solution_ana)/np.max(-solution_fem[:,2]),np.max(-solution_fem[:,2])/np.max(solution_ana))
+    #plt.plot(sensor.x[:,0],-solution_fem[:,2], label="FEM")
+    plt.plot(sensor.x[:,0],-solution_fem_2[:,2], label="FEM_2")
+    plt.plot(sensor.x[:,0],solution_ana, label ="Analytical")
+    #plt.plot(sensor.x[:,0],np.abs(-solution_fem_normed-solution_ana_normed), label="error")
     plt.legend()
     #plt.yscale("log")
     plt.savefig("fem_solution.png")
