@@ -168,7 +168,6 @@ if __name__=="__main__":
     print(__name__)
     problem, mesh, u = rebar_problem(4)
     parameters_steel["amount"]=4
-    #parameters_steel["E"]=0.
     solution_analytical = analytical_solution_clamped(force/(length), length, height, width, z_rebar, parameters_steel, parameters_concrete)
     solver = dfx.nls.petsc.NewtonSolver(mesh.comm, problem)
     sensor = DisplacementAtDofSensor(u, lambda x : np.logical_and(np.isclose(x[1],0.),np.isclose(x[2],0.)))
@@ -185,12 +184,10 @@ if __name__=="__main__":
     solution_ana = solution_analytical.evaluate(sensor.x[:,0])
     solution_ana_normed = solution_ana/np.max(solution_ana)
     print(np.max(solution_ana), np.max(-solution_fem[:,2]),np.max(solution_ana)/np.max(-solution_fem[:,2]),np.max(-solution_fem[:,2])/np.max(solution_ana))
-    #plt.plot(sensor.x[:,0],-solution_fem[:,2], label="FEM")
-    plt.plot(sensor.x[:,0],-solution_fem_2[:,2], label="FEM_2")
+    plt.plot(sensor.x[:,0],-solution_fem[:,2], label="FEM bootom")
+    plt.plot(sensor.x[:,0],-solution_fem_2[:,2], label="FEM top")
     plt.plot(sensor.x[:,0],solution_ana, label ="Analytical")
-    #plt.plot(sensor.x[:,0],np.abs(-solution_fem_normed-solution_ana_normed), label="error")
     plt.legend()
-    #plt.yscale("log")
     plt.savefig("fem_solution.png")
 
     with dfx.io.XDMFFile(mesh.comm, "displacements.xdmf", "w") as f:
