@@ -1,0 +1,11 @@
+name: fenics-reinforcement
+channels:
+  - conda-forge
+dependencies:
+  - fenics-dolfinx
+  - pint
+  - pytest
+  - python-gmsh
+  - meshio
+  - pip:
+    - -e .
