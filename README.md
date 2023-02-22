@@ -1,3 +1,4 @@
+![Test](https://github.com/BAMresearch/fenics-reinforcement/.github/workflows/python-package-conda.yml/badge.svg)
 # Fenics-reinforcement
 FEniCS-reinforcement (name WIP) is a package that will let you include truss elements in a 3d mesh in FEniCSX. Currently, the trusses are hardcoded and we do not use FEniCS for the calculation of stresses and stiffness, but we add those to the stiffness matrix manually.
 
