@@ -7,5 +7,6 @@ dependencies:
   - pytest
   - python-gmsh
   - meshio
+  - pip
   - pip:
     - -e .
