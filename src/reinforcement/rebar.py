@@ -71,15 +71,15 @@ class ElasticTrussRebar(RebarInterface):
     This class can insert purely elastic rebar stiffnesses into the concrete matrix and the internal forces vector.
     Equations from http://what-when-how.com/the-finite-element-method/fem-for-trusses-finite-element-method-part-1/
 
-    Remark
-    ------
-    The implementation is not very efficient
     """
 
-    def apply_to_diagonal_mass(self, M):
+    def apply_to_diagonal_mass(self, M : PETSc.Vec):
         """
-        This method will assume a diagonal Mass matrix. The added entries will be calculated according
-        to Gauß-Lobatto Quadrature
+        Adds nodal masses to a diagonal mass matrix.
+        
+        Args:
+            M: The diagonal from of the mass matrix as a PETSc vector 
+
         """
         points = self.function_space.tabulate_dof_coordinates().flatten()
         diagonal_mass_1d = np.array([[1.0, 0.0], [0.0, 1.0]])
@@ -106,7 +106,14 @@ class ElasticTrussRebar(RebarInterface):
             M.setValues(dofs, mass_local, addv=PETSc.InsertMode.ADD)
             M.assemble()
 
-    def apply_to_stiffness(self, K, u):
+    def apply_to_stiffness(self, K : PETSc.Mat, u : PETSc.Vec):
+        """
+        Adds truss stiffness to global stiffness matrix,
+        
+        Args:
+            K: The global stiffness matrix.
+            u: The global displacements.
+        """
         points = self.function_space.tabulate_dof_coordinates().flatten()
         K_1d = np.array([[1.0, -1.0], [-1.0, 1.0]])
         T = np.zeros((2, 6))
@@ -124,7 +131,15 @@ class ElasticTrussRebar(RebarInterface):
             K.setValues(dofs, dofs, K_local.flat, addv=PETSc.InsertMode.ADD)
             K.assemble()
 
-    def apply_to_forces(self, f_int, u, sign=1.0):
+    def apply_to_forces(self, f_int : PETSc.Vec, u : PETSc.Vec, sign : float = 1.0):
+        """
+        Adds truss nodal internal forces to global forces vector.
+        
+        Args:
+            f_int: The global forces vector.
+            u: The global displacements.
+            sign: Sign of the added values.
+        """
         assert sign in [1.0, -1.0]
         points = self.function_space.tabulate_dof_coordinates().flatten()
         f_1d = np.array([-1.0, 1.0])

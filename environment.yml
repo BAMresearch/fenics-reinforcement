@@ -7,6 +7,8 @@ dependencies:
   - pytest
   - python-gmsh
   - meshio
+  - mkdocs
+  - mkdocstrings
   - pip
   - pip:
     - -e .
