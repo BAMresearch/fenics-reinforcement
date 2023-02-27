@@ -8,6 +8,7 @@ from mpi4py import MPI
 from numpy.typing import ArrayLike
 import math
 from itertools import product
+from typing import Tuple,List
 
 
 def _num_elems(min_amount_elems, reinf_elems):
@@ -162,40 +163,40 @@ def create_concrete_slab(
     margin: float,
     s: float,
     msh_filename: str,
-    xdmf_filenames: list,
-    z: list,
+    xdmf_filenames: list[str],
+    z: list[float],
 ):
     """
     This function creates a 3D-quadrilateral mesh in the shape of a cuboid with reinforcement
     rebars as line elements in a 3D space. Only a very general case with a uniform rebar-grid
     at the top and/or bottom of the slab is possible.
 
-    Parameters
-    ----------
-    point1: ArrayLike
-        Starting point of the cuboid.
-    point2: ArrayLike
-        Endpoint of the cuboid.
-    n_x: int
-        Number of reinforcement bars in x-direction.
-    n_y: int
-        Number of reinforcement bars in y-direction.
-    margin: float
-        Absolute value of the smallest distance between the outer edges of the concrete mesh
-        and a reinforcement element.
-    s: float
-        Maximal element size. It may be corrected according to n_x and n_y, such that
-        the reinforcement discretization is always held true and reinorcement&concrete
-        elements share the same nodes.
-    msh_filename: str
-        Filename of the mesh (msh file).
-    xdmf_filenames : list
-        Desired names of the two xdmf meshes (concrete & reinforcement).
-    z: list
-        Position of the reinforecement bar(s). The list may contain either one or two floats, dictating whether one or two reinforcement bars should be created. The float represents the z-coordinate of the bar(s)
+    Args:
+    
+        point1: 
+            Starting point of the cuboid.
+        point2: 
+            Endpoint of the cuboid.
+        n_x: 
+            Number of reinforcement bars in x-direction.
+        n_y: 
+            Number of reinforcement bars in y-direction.
+        margin: 
+            Absolute value of the smallest distance between the outer edges of the concrete mesh
+            and a reinforcement element.
+        s: 
+            Maximal element size. It may be corrected according to n_x and n_y, such that
+            the reinforcement discretization is always held true and reinorcement&concrete
+            elements share the same nodes.
+        msh_filename: 
+            Filename of the mesh (msh file).
+        xdmf_filenames : 
+            Desired names of the two xdmf meshes (concrete & reinforcement).
+        z: 
+            Position of the reinforecement bar(s). The list may contain either one or two floats, dictating whether one or two reinforcement bars should be created. The float represents the z-coordinate of the bar(s)
 
-    Returns
-    -------
+    Returns:
+    
 
     """
 
@@ -300,21 +301,19 @@ def create_concrete_slab(
     _create_xdmf(msh_filename, xdmf_filenames)
 
 
-def read_xdmf(xdmf_files):
+def read_xdmf(xdmf_files : list[str]) -> tuple[dfx.mesh.Mesh, dfx.mesh.Mesh]:
     """
-    File that reads xdmf_files to use them in FEniCSx
+    Function that reads xdmf_files to use them in FEniCSx
 
-    Parameters
-    ----------
-    xdmf_files : list
-        Names (str) of the xdmf_files, [concrete, reinforcement] - in this order.
+    Args:
+        xdmf_files :
+            Names (str) of the xdmf_files, [concrete, reinforcement] - in this order.
 
-    Returns
-    -------
-    concrete_mesh : dolfinx.mesh.Mesh
-        The concrete mesh (hexa elements).
-    rebar_mesh : dolfinx.mesh.Mesh
-        The reinforcement mesh (line elements).
+    Returns:
+        concrete_mesh : 
+            The concrete mesh (hexa elements).
+        rebar_mesh : 
+            The reinforcement mesh (line elements).
 
     """
     with dfx.io.XDMFFile(MPI.COMM_WORLD, xdmf_files[0], "r") as xdmf:

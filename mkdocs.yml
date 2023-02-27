@@ -1,0 +1,17 @@
+site_name: My Docs
+
+theme:
+  #name: "readthedocs"
+  name: "material"
+plugins:
+  - mkdocstrings
+  # - mkautodoc
+  #- search
+  #- mkapi
+nav:
+  - Start: index.md
+  - Demos:
+    - 3-point bending: demos/3-point-bending.md
+  - API:
+    - Mesh: API/mesh_generation.md
+    - Rebar: API/rebar.md
