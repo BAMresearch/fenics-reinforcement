@@ -6,3 +6,6 @@ dependencies:
   - mkdocs-material
   - mkdocstrings
   - mkdocstrings-python
+  - pip
+  - pip:
+    - -e .
