@@ -27,6 +27,8 @@ jobs:
         run: mamba install mkdocs mkdocstrings mkdocstrings-python mkdocs-material
       
       - name: Make docs
-        run: mkdocs gh-deploy --force
+        shell: bash -l {0}
+        run: |
+          mkdocs gh-deploy --force
 
 
