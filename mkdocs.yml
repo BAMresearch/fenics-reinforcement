@@ -1,4 +1,8 @@
-site_name: My Docs
+site_name: FEniCS-Reinforcement
+site_description: Steel rebar reinforcement in FEniCSx models
+site_author: BAMreasearch
+
+repo_url: https://github.com/BAMresearch/fenics-reinforcement
 
 theme:
   name: "material"
