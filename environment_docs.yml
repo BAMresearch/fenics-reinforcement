@@ -1,0 +1,8 @@
+name: fenics-reinforcement-docs
+channels:
+  - conda-forge
+dependencies:
+  - mkdocs
+  - mkdocs-material
+  - mkdocstrings
+  - mkdocstrings-python
