@@ -9,7 +9,7 @@ class RebarInterface(ABC):
     """
     An interface for trusses. Contains methods to assign dofs.
     """
-    def __init__(self, concrete_mesh : dfx.mesh.Mesh, rebar_mesh : dfx.fem.Mesh, function_space : dfx.fem.FunctionSpace, parameters: dict):
+    def __init__(self, concrete_mesh : dfx.mesh.Mesh, rebar_mesh : dfx.mesh.Mesh, function_space : dfx.fem.FunctionSpace, parameters: dict):
         """Initialize rebar class
 
         Args:
