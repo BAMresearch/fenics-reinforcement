@@ -24,7 +24,7 @@ jobs:
             python-version: 3.9
 
       - name: Update environment
-        run: mamba install mkdocs mkdocstrings mkdocstrings-python mkdocs-material
+        run: mamba env update -n reinforcement_docs -f environment_docs.yml
       
       - name: Make docs
         shell: bash -l {0}
