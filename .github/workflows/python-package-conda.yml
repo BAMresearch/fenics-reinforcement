@@ -18,7 +18,7 @@ on:
 #  CACHE_NUMBER: 2  # increase to reset cache manually
 
 jobs:
-  testing_tests:
+  tests:
     runs-on: ubuntu-latest
 
     steps:
@@ -35,8 +35,14 @@ jobs:
 
       - name: Update environment
         run: mamba env update -n reinforcement -f environment.yml
+        run: mamba env update -n reinforcement -f environment_docs.yml
       
       - name: Run tests
         shell: bash -l {0}
         run: |
           pytest
+      
+      - name: Run doc build
+        shell: bash -l {0}
+        run: |
+          mkdocs build
