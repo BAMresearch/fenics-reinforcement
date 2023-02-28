@@ -35,7 +35,7 @@ jobs:
 
       - name: Update environment
         run: mamba env update -n reinforcement -f environment.yml
-        run: mamba env update -n reinforcement -f environment_docs.yml
+             mamba env update -n reinforcement -f environment_docs.yml
       
       - name: Run tests
         shell: bash -l {0}
