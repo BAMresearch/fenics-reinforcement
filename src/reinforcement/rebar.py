@@ -1,14 +1,24 @@
-from abc import ABC, ABCMeta, abstractmethod
+from abc import ABC, abstractmethod
 import dolfinx as dfx
 import numpy as np
 from petsc4py import PETSc
 import sys
 
-np.set_printoptions(threshold=sys.maxsize)
-
 
 class RebarInterface(ABC):
-    def __init__(self, concrete_mesh, rebar_mesh, function_space, parameters: dict):
+    """
+    An interface for trusses. Contains methods to assign dofs.
+    """
+    def __init__(self, concrete_mesh : dfx.mesh.Mesh, rebar_mesh : dfx.mesh.Mesh, function_space : dfx.fem.FunctionSpace, parameters: dict):
+        """Initialize rebar class
+
+        Args:
+            concrete_mesh: The 3D mesh of the concrete structure.
+            rebar_mesh: The line mesh of the steel rebar.
+            function_space: The function space object of the concrete structure.
+            parameters: A dictinary containing all needed parameters of the steel. Contains: 'A', 'E', 'rho'.
+
+        """
         self.concrete_mesh = concrete_mesh
         self.rebar_mesh = rebar_mesh
         self.function_space = function_space
@@ -72,6 +82,17 @@ class ElasticTrussRebar(RebarInterface):
     Equations from http://what-when-how.com/the-finite-element-method/fem-for-trusses-finite-element-method-part-1/
 
     """
+    def __init__(self, concrete_mesh : dfx.mesh.Mesh, rebar_mesh : dfx.mesh.Mesh, function_space : dfx.fem.FunctionSpace, parameters: dict):
+        """Initialize rebar class
+
+        Args:
+            concrete_mesh: The 3D mesh of the concrete structure.
+            rebar_mesh: The line mesh of the steel rebar.
+            function_space: The function space object of the concrete structure.
+            parameters: A dictinary containing all needed parameters of the steel. Contains: 'A', 'E', 'rho'.
+
+        """
+        super().__init__(concrete_mesh, rebar_mesh, function_space, parameters)
 
     def apply_to_diagonal_mass(self, M : PETSc.Vec):
         """

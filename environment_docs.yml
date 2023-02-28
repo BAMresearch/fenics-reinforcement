@@ -1,4 +1,4 @@
-name: fenics-reinforcement-docs
+name: fenics-reinforcement
 channels:
   - conda-forge
 dependencies:

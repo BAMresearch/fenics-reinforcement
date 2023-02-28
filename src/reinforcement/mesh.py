@@ -190,7 +190,7 @@ def create_concrete_slab(
             elements share the same nodes.
         msh_filename: 
             Filename of the mesh (msh file).
-        xdmf_filenames : 
+        xdmf_filenames: 
             Desired names of the two xdmf meshes (concrete & reinforcement).
         z: 
             Position of the reinforecement bar(s). The list may contain either one or two floats, dictating whether one or two reinforcement bars should be created. The float represents the z-coordinate of the bar(s)
@@ -306,13 +306,13 @@ def read_xdmf(xdmf_files : list[str]) -> tuple[dfx.mesh.Mesh, dfx.mesh.Mesh]:
     Function that reads xdmf_files to use them in FEniCSx
 
     Args:
-        xdmf_files :
+        xdmf_files:
             Names (str) of the xdmf_files, [concrete, reinforcement] - in this order.
 
     Returns:
-        concrete_mesh : 
+        concrete_mesh: 
             The concrete mesh (hexa elements).
-        rebar_mesh : 
+        rebar_mesh: 
             The reinforcement mesh (line elements).
 
     """
