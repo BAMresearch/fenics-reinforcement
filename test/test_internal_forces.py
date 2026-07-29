@@ -1,6 +1,7 @@
 from reinforcement.mesh import create_concrete_slab, read_xdmf
 from reinforcement.rebar import ElasticTrussRebar
 import dolfinx as dfx
+import dolfinx.fem.petsc
 import numpy as np
 import ufl
 from pint import UnitRegistry
@@ -39,7 +40,7 @@ create_concrete_slab(
 
 concrete_mesh, rebar_mesh = read_xdmf(xdmf_filenames)
 
-P1 = dfx.fem.VectorFunctionSpace(concrete_mesh, ("CG", 1))
+P1 = dfx.fem.functionspace(concrete_mesh, ("CG", 1, (concrete_mesh.geometry.dim,)))
 
 rebar = ElasticTrussRebar(concrete_mesh, rebar_mesh, P1, parameters_steel)
 
@@ -50,13 +51,13 @@ v_ = ufl.TestFunction(P1)
 a = ufl.inner(u_,v_) * ufl.dx
 
 A = dfx.fem.petsc.create_matrix(dfx.fem.form(a))
-f_int = b.vector
+f_int = b.x.petsc_vec
 
-#u.vector.array[:] = np.random.random(u.vector.array.size)
+#u.x.array[:] = np.random.random(u.x.array.size)
 u.interpolate(lambda x:(0.005*x[0], -0.005*x[1], 0.*x[2]))
 
-rebar.apply_to_stiffness(A, u.vector)
-rebar.apply_to_forces(f_int, u.vector)
+rebar.apply_to_stiffness(A, u.x.petsc_vec)
+rebar.apply_to_forces(f_int, u.x.petsc_vec)
 
 def petsc2array(v):
     s=v.getValues(range(0, v.getSize()[0]), range(0,  v.getSize()[1]))
@@ -66,6 +67,6 @@ A_dense = A.convert("dense")
 A_arr = petsc2array(A_dense)
 
 def test_f_int_equals_Ku():
-    Au = A_arr@u.vector.array
+    Au = A_arr@u.x.array
     f_arr = f_int.array
     assert np.linalg.norm(Au-f_arr)/np.linalg.norm(f_arr) < 1e-12

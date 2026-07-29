@@ -1,6 +1,8 @@
 from reinforcement.mesh import create_concrete_slab, read_xdmf
 from reinforcement.rebar import ElasticTrussRebar
 import dolfinx as dfx
+import dolfinx.fem.petsc
+import dolfinx.nls.petsc
 import ufl
 import numpy as np
 from petsc4py import PETSc
@@ -22,7 +24,7 @@ parameters_concrete = {
     "rho": (2.4*ureg.gram/ureg.centimeter**3).to_base_units().magnitude,
     }
 
-class NonlinearReinforcementProblem(dfx.fem.petsc.NonlinearProblem):
+class NonlinearReinforcementProblem(dfx.fem.petsc.NewtonSolverNonlinearProblem):
     """
     This class demonstrates how the reinforcement could be used in a nonlinear problem.
     """
@@ -69,7 +71,7 @@ def rebar_problem(n):
 
     concrete_mesh, rebar_mesh = read_xdmf(xdmf_filenames)
 
-    P1 = dfx.fem.VectorFunctionSpace(concrete_mesh, ("CG", 1))
+    P1 = dfx.fem.functionspace(concrete_mesh, ("CG", 1, (concrete_mesh.geometry.dim,)))
 
     rebar = ElasticTrussRebar(concrete_mesh, rebar_mesh, P1, parameters_steel)
 
@@ -114,7 +116,7 @@ def rebar_problem(n):
     ds = ufl.Measure("ds", domain=concrete_mesh, subdomain_data=facet_tag)
     with dfx.io.XDMFFile(concrete_mesh.comm, "facet_tags.xdmf", "w") as xdmf:
         xdmf.write_mesh(concrete_mesh)
-        xdmf.write_meshtags(facet_tag)
+        xdmf.write_meshtags(facet_tag, concrete_mesh.geometry)
 
 
     external_force_form = - pressure * ufl.dot(ufl.FacetNormal(concrete_mesh), v_) * ds(42)
@@ -136,7 +138,7 @@ class DisplacementAtDofSensor:
         self.x = u.function_space.mesh.geometry.x[nodes]
     
     def __call__(self):
-        return self.u.vector.array[self.dofs]
+        return self.u.x.array[self.dofs]
 
 def test_rebar():
     for i in range(2,11):

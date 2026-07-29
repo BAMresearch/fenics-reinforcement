@@ -1,23 +1,20 @@
 # This file covers all functions related to the mesh generation in gmsh and its conversion into separated xdmf files, which can then be used in dolfinx.
 
-import gmsh
-import numpy as np
-import meshio
+import math
+
 import dolfinx as dfx
+import gmsh
+import meshio
+import numpy as np
 from mpi4py import MPI
 from numpy.typing import ArrayLike
-import math
-from itertools import product
-from typing import Tuple,List
 
 
 def _num_elems(min_amount_elems, reinf_elems):
     """
     Corrects number of concrete elements (defined by s) in order to fit the coice of n_x and n_y.
     """
-    if reinf_elems == 0:
-        return min_amount_elems
-    elif min_amount_elems % reinf_elems == 0:
+    if reinf_elems == 0 or min_amount_elems % reinf_elems == 0:
         return min_amount_elems
     else:
         return int(np.ceil(min_amount_elems / reinf_elems)) * reinf_elems

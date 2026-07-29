@@ -1,6 +1,8 @@
 from reinforcement.mesh import create_concrete_slab, read_xdmf
 from reinforcement.rebar import ElasticTrussRebar
 import dolfinx as dfx
+import dolfinx.fem.petsc
+import dolfinx.nls.petsc
 import ufl
 import numpy as np
 from petsc4py import PETSc
@@ -62,7 +64,7 @@ create_concrete_slab(
 
 concrete_mesh, rebar_mesh = read_xdmf(xdmf_filenames)
 
-P1 = dfx.fem.VectorFunctionSpace(concrete_mesh, ("CG", 1))
+P1 = dfx.fem.functionspace(concrete_mesh, ("CG", 1, (concrete_mesh.geometry.dim,)))
 
 rebar = ElasticTrussRebar(concrete_mesh, rebar_mesh, P1, parameters_steel)
 
@@ -121,6 +123,10 @@ def left(x):
 def right(x):
     return np.logical_and(np.isclose(x[0], length - margin), np.isclose(x[2], 0.0))
 
+
+concrete_mesh.topology.create_connectivity(
+    concrete_mesh.topology.dim - 2, concrete_mesh.topology.dim
+)
 
 # left side
 boundary_entities_left = dfx.mesh.locate_entities_boundary(

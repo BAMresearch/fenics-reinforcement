@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
+
 import dolfinx as dfx
 import numpy as np
 from petsc4py import PETSc
-import sys
 
 
 class RebarInterface(ABC):
@@ -32,7 +32,10 @@ class RebarInterface(ABC):
         self.rebar_mesh.topology.create_connectivity(fdim, 0)
         num_lines_local = self.rebar_mesh.topology.index_map(fdim).size_local
         geometry_entities = dfx.cpp.mesh.entities_to_geometry(
-            self.rebar_mesh, fdim, np.arange(num_lines_local, dtype=np.int32), False
+            self.rebar_mesh._cpp_object,
+            fdim,
+            np.arange(num_lines_local, dtype=np.int32),
+            False,
         )
         dofs = []
         for line in geometry_entities:
