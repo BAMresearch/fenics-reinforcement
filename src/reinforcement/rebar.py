@@ -4,19 +4,30 @@ import dolfinx as dfx
 import numpy as np
 from petsc4py import PETSc
 
+from .maps import build_vertex_subspace_map
+
 
 class RebarInterface(ABC):
     """
     An interface for trusses. Contains methods to assign dofs.
     """
-    def __init__(self, concrete_mesh : dfx.mesh.Mesh, rebar_mesh : dfx.mesh.Mesh, function_space : dfx.fem.FunctionSpace, parameters: dict):
+    def __init__(
+        self,
+        concrete_mesh : dfx.mesh.Mesh,
+        rebar_mesh : dfx.mesh.Mesh,
+        function_space : dfx.fem.FunctionSpace,
+        parameters: dict,
+        vertex_map: np.ndarray,
+    ):
         """Initialize rebar class
 
         Args:
             concrete_mesh: The 3D mesh of the concrete structure.
-            rebar_mesh: The line mesh of the steel rebar.
+            rebar_mesh: The line mesh of the steel rebar, built as a submesh
+                of concrete_mesh's edges (see reinforcement.mesh.read_msh).
             function_space: The function space object of the concrete structure.
             parameters: A dictinary containing all needed parameters of the steel. Contains: 'A', 'E', 'rho'.
+            vertex_map: rebar_mesh's vertex map, as returned by read_msh.
 
         """
         self.concrete_mesh = concrete_mesh
@@ -24,51 +35,24 @@ class RebarInterface(ABC):
         self.function_space = function_space
         self.parameters = parameters
         self.dof_array = np.array([], dtype=np.int32)
-        self._assign_dofs()
+        self._assign_dofs(vertex_map)
 
-    def _assign_dofs(self, tol=1e-6):
-        # first all reinforcement dofs and their coordinates are found and saved in geometry_entities and points respectively
+    def _assign_dofs(self, vertex_map: np.ndarray):
+        rebar_function_space = dfx.fem.functionspace(self.rebar_mesh, ("Lagrange", 1, (3,)))
+        space_map = build_vertex_subspace_map(vertex_map, self.function_space, rebar_function_space)
+
         fdim = self.rebar_mesh.topology.dim
         self.rebar_mesh.topology.create_connectivity(fdim, 0)
+        cell_to_vertex = self.rebar_mesh.topology.connectivity(fdim, 0)
         num_lines_local = self.rebar_mesh.topology.index_map(fdim).size_local
-        geometry_entities = dfx.cpp.mesh.entities_to_geometry(
-            self.rebar_mesh._cpp_object,
-            fdim,
-            np.arange(num_lines_local, dtype=np.int32),
-            False,
-        )
+
+        block_size = self.function_space.dofmap.index_map_bs
         dofs = []
-        for line in geometry_entities:
-            start = self.rebar_mesh.geometry.x[line][0]
-            end = self.rebar_mesh.geometry.x[line][1]
-
-            dofs_start = self._locate_concrete_dofs(start, tol)
-            dofs_end = self._locate_concrete_dofs(end, tol)
-
-            dofs.extend(dofs_start)
-            dofs.extend(dofs_end)
+        for cell in range(num_lines_local):
+            for rebar_vertex in cell_to_vertex.links(cell):
+                concrete_dof = space_map.parent[rebar_vertex]
+                dofs.extend(block_size * concrete_dof + np.arange(block_size))
         self.dof_array = np.array(dofs, dtype=np.int32).reshape(-1, 3)
-
-    def _locate_concrete_dofs(self, point, tol):
-        x, y, z = point
-
-        def rebar_nodes(var):
-            return np.logical_and(
-                np.logical_and(np.abs(var[1] - y) < tol, np.abs(var[0] - x) < tol),
-                np.abs(var[2] - z) < tol,
-            )
-
-        dofs_toappend = dfx.fem.locate_dofs_geometrical(
-            self.function_space, rebar_nodes
-        )
-        try:
-            assert len(dofs_toappend) == 1
-        except AssertionError:
-            raise Exception(
-                f"{len(dofs_toappend)} dofs found at ({x},{y},{z}), expected 1. Try adjusting the tolerance"
-            )
-
-        return dofs_toappend * 3.0 + np.arange(3, dtype=np.float64)
 
     @abstractmethod
     def apply_to_forces(self, f_int, u):
@@ -85,17 +69,26 @@ class ElasticTrussRebar(RebarInterface):
     Equations from http://what-when-how.com/the-finite-element-method/fem-for-trusses-finite-element-method-part-1/
 
     """
-    def __init__(self, concrete_mesh : dfx.mesh.Mesh, rebar_mesh : dfx.mesh.Mesh, function_space : dfx.fem.FunctionSpace, parameters: dict):
+    def __init__(
+        self,
+        concrete_mesh : dfx.mesh.Mesh,
+        rebar_mesh : dfx.mesh.Mesh,
+        function_space : dfx.fem.FunctionSpace,
+        parameters: dict,
+        vertex_map: np.ndarray,
+    ):
         """Initialize rebar class
 
         Args:
             concrete_mesh: The 3D mesh of the concrete structure.
-            rebar_mesh: The line mesh of the steel rebar.
+            rebar_mesh: The line mesh of the steel rebar, built as a submesh
+                of concrete_mesh's edges (see reinforcement.mesh.read_msh).
             function_space: The function space object of the concrete structure.
             parameters: A dictinary containing all needed parameters of the steel. Contains: 'A', 'E', 'rho'.
+            vertex_map: rebar_mesh's vertex map, as returned by read_msh.
 
         """
-        super().__init__(concrete_mesh, rebar_mesh, function_space, parameters)
+        super().__init__(concrete_mesh, rebar_mesh, function_space, parameters, vertex_map)
 
     def apply_to_diagonal_mass(self, M : PETSc.Vec):
         """

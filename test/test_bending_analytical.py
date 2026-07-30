@@ -1,6 +1,4 @@
-from reinforcement.mesh import read_msh
-from mpi4py import MPI
-from reinforcement.mesh import create_concrete_slab, read_xdmf
+from reinforcement.mesh import create_concrete_slab, read_msh
 from reinforcement.rebar import ElasticTrussRebar
 import dolfinx as dfx
 import dolfinx.fem.petsc
@@ -70,15 +68,11 @@ def rebar_problem(n):
     create_concrete_slab(
         point1, point2, nx, ny, margin, h, msh_filename, xdmf_filenames, z=[z_rebar]
     )
-    #full_mesh = dfx.io.gmsh.read_from_msh(msh_filename,MPI.COMM_WORLD)
-    #concrete_mesh = full_mesh.mesh
-    #rebar_entities = full_mesh.ridge_tags.indices[full_mesh.ridge_tags.values == 1]
-    #rebar_mesh,_,_,_, = dfx.mesh.create_submesh(concrete_mesh,1, rebar_entities)
-    concrete_mesh, rebar_mesh = read_msh(msh_filename)
+    concrete_mesh, rebar_mesh, vertex_map = read_msh(msh_filename)
 
     P1 = dfx.fem.functionspace(concrete_mesh, ("CG", 1, (concrete_mesh.geometry.dim,)))
 
-    rebar = ElasticTrussRebar(concrete_mesh, rebar_mesh, P1, parameters_steel)
+    rebar = ElasticTrussRebar(concrete_mesh, rebar_mesh, P1, parameters_steel, vertex_map)
 
 
     def eps(v):

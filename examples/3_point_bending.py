@@ -1,4 +1,4 @@
-from reinforcement.mesh import create_concrete_slab, read_xdmf
+from reinforcement.mesh import create_concrete_slab, read_msh
 from reinforcement.rebar import ElasticTrussRebar
 import dolfinx as dfx
 import dolfinx.fem.petsc
@@ -62,11 +62,11 @@ create_concrete_slab(
     point1, point2, nx, ny, margin, h, msh_filename, xdmf_filenames, z=[z_rebar]
 )
 
-concrete_mesh, rebar_mesh = read_xdmf(xdmf_filenames)
+concrete_mesh, rebar_mesh, vertex_map = read_msh(msh_filename)
 
 P1 = dfx.fem.functionspace(concrete_mesh, ("CG", 1, (concrete_mesh.geometry.dim,)))
 
-rebar = ElasticTrussRebar(concrete_mesh, rebar_mesh, P1, parameters_steel)
+rebar = ElasticTrussRebar(concrete_mesh, rebar_mesh, P1, parameters_steel, vertex_map)
 
 
 def eps(v):

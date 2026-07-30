@@ -304,14 +304,19 @@ def read_xdmf(xdmf_files : list[str]) -> tuple[dfx.mesh.Mesh, dfx.mesh.Mesh]:
     """
     Function that reads xdmf_files to use them in FEniCSx
 
+    Note:
+        rebar_mesh is read independently of concrete_mesh here, so there is
+        no vertex map between them; it cannot be used with
+        RebarInterface/ElasticTrussRebar, which require one (see read_msh).
+
     Args:
         xdmf_files:
             Names (str) of the xdmf_files, [concrete, reinforcement] - in this order.
 
     Returns:
-        concrete_mesh: 
+        concrete_mesh:
             The concrete mesh (hexa elements).
-        rebar_mesh: 
+        rebar_mesh:
             The reinforcement mesh (line elements).
 
     """
@@ -323,12 +328,15 @@ def read_xdmf(xdmf_files : list[str]) -> tuple[dfx.mesh.Mesh, dfx.mesh.Mesh]:
     return concrete_mesh, rebar_mesh
 
 
-def read_msh(msh_filename: str, tol: float = 1e-6) -> tuple[dfx.mesh.Mesh, dfx.mesh.Mesh]:
+def read_msh(
+    msh_filename: str, tol: float = 1e-6
+) -> tuple[dfx.mesh.Mesh, dfx.mesh.Mesh, np.ndarray]:
     """
-    Reads a msh file directly (as an alternative to read_xdmf), returning the
-    reinforcement mesh as a true submesh of the concrete mesh's edges. Because
-    both meshes are derived from the same concrete_mesh partition, they are
-    guaranteed to live on the same MPI rank when used in parallel.
+    Reads a msh file directly, returning the reinforcement mesh as a true
+    submesh of the concrete mesh's edges, along with the vertex map required
+    by RebarInterface/ElasticTrussRebar. Because both meshes are derived from
+    the same concrete_mesh partition, they are guaranteed to live on the same
+    MPI rank when used in parallel.
 
     The concrete mesh is built via meshio + dolfinx.mesh.create_mesh rather
     than dolfinx.io.gmsh.read_from_msh/model_to_mesh, which crashes whenever a
@@ -350,6 +358,11 @@ def read_msh(msh_filename: str, tol: float = 1e-6) -> tuple[dfx.mesh.Mesh, dfx.m
             The concrete mesh (hexahedron elements).
         rebar_mesh:
             The reinforcement mesh, as a submesh of concrete_mesh's edges.
+        vertex_map:
+            As returned by dolfinx.mesh.create_submesh: rebar_mesh vertex
+            index -> concrete_mesh vertex index. Pass this to
+            ElasticTrussRebar (as `vertex_map`) for exact, tolerance-free dof
+            assignment; see reinforcement.maps.build_vertex_subspace_map.
 
     """
     msh = meshio.read(msh_filename)
@@ -389,5 +402,8 @@ def read_msh(msh_filename: str, tol: float = 1e-6) -> tuple[dfx.mesh.Mesh, dfx.m
         )
         rebar_edges[i] = match[0]
 
-    rebar_mesh, _, _, _ = dfx.mesh.create_submesh(concrete_mesh, 1, rebar_edges)
-    return concrete_mesh, rebar_mesh
+    # create_submesh's 3rd return value (topological vertex map) is an
+    # EntityMap object, not a plain array; the 4th (geometry node map) is
+    # already a plain ndarray and coincides with it for affine P1 meshes.
+    rebar_mesh, _, _, vertex_map = dfx.mesh.create_submesh(concrete_mesh, 1, rebar_edges)
+    return concrete_mesh, rebar_mesh, vertex_map
