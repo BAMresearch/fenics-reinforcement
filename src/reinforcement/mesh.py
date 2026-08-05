@@ -1,23 +1,22 @@
 # This file covers all functions related to the mesh generation in gmsh and its conversion into separated xdmf files, which can then be used in dolfinx.
 
-import gmsh
-import numpy as np
-import meshio
+import math
+
+import basix.ufl
 import dolfinx as dfx
+import gmsh
+import meshio
+import numpy as np
+import ufl
 from mpi4py import MPI
 from numpy.typing import ArrayLike
-import math
-from itertools import product
-from typing import Tuple,List
 
 
 def _num_elems(min_amount_elems, reinf_elems):
     """
     Corrects number of concrete elements (defined by s) in order to fit the coice of n_x and n_y.
     """
-    if reinf_elems == 0:
-        return min_amount_elems
-    elif min_amount_elems % reinf_elems == 0:
+    if reinf_elems == 0 or min_amount_elems % reinf_elems == 0:
         return min_amount_elems
     else:
         return int(np.ceil(min_amount_elems / reinf_elems)) * reinf_elems
@@ -305,14 +304,19 @@ def read_xdmf(xdmf_files : list[str]) -> tuple[dfx.mesh.Mesh, dfx.mesh.Mesh]:
     """
     Function that reads xdmf_files to use them in FEniCSx
 
+    Note:
+        rebar_mesh is read independently of concrete_mesh here, so there is
+        no vertex map between them; it cannot be used with
+        RebarInterface/ElasticTrussRebar, which require one (see read_msh).
+
     Args:
         xdmf_files:
             Names (str) of the xdmf_files, [concrete, reinforcement] - in this order.
 
     Returns:
-        concrete_mesh: 
+        concrete_mesh:
             The concrete mesh (hexa elements).
-        rebar_mesh: 
+        rebar_mesh:
             The reinforcement mesh (line elements).
 
     """
@@ -322,3 +326,84 @@ def read_xdmf(xdmf_files : list[str]) -> tuple[dfx.mesh.Mesh, dfx.mesh.Mesh]:
     with dfx.io.XDMFFile(MPI.COMM_WORLD, xdmf_files[1], "r") as xdmf:
         rebar_mesh = xdmf.read_mesh(name="Grid")
     return concrete_mesh, rebar_mesh
+
+
+def read_msh(
+    msh_filename: str, tol: float = 1e-6
+) -> tuple[dfx.mesh.Mesh, dfx.mesh.Mesh, np.ndarray]:
+    """
+    Reads a msh file directly, returning the reinforcement mesh as a true
+    submesh of the concrete mesh's edges, along with the vertex map required
+    by RebarInterface/ElasticTrussRebar. Because both meshes are derived from
+    the same concrete_mesh partition, they are guaranteed to live on the same
+    MPI rank when used in parallel.
+
+    The concrete mesh is built via meshio + dolfinx.mesh.create_mesh rather
+    than dolfinx.io.gmsh.read_from_msh/model_to_mesh, which crashes whenever a
+    dimension-1 physical group (the reinforcement lines) coexists with the
+    dimension-3 physical group (the concrete volume) in the same gmsh model
+    (reproduced on dolfinx 0.9.0 and 0.11.0, comm size 1 and under mpiexec).
+    The reinforcement lines' physical group is instead read via meshio, and
+    matched by coordinates against the concrete mesh's own edges.
+
+    Args:
+        msh_filename:
+            Name of the msh file (as created by create_concrete_slab).
+        tol:
+            Absolute coordinate tolerance used to match reinforcement line
+            endpoints to concrete mesh edges.
+
+    Returns:
+        concrete_mesh:
+            The concrete mesh (hexahedron elements).
+        rebar_mesh:
+            The reinforcement mesh, as a submesh of concrete_mesh's edges.
+        vertex_map:
+            As returned by dolfinx.mesh.create_submesh: rebar_mesh vertex
+            index -> concrete_mesh vertex index. Pass this to
+            ElasticTrussRebar (as `vertex_map`) for exact, tolerance-free dof
+            assignment; see reinforcement.maps.build_vertex_subspace_map.
+
+    """
+    msh = meshio.read(msh_filename)
+
+    hex_cells = msh.get_cells_type("hexahedron")
+    # meshio preserves gmsh's node ordering, which differs from dolfinx's own
+    # internal ordering for hexahedra; permute before handing cells to dolfinx
+    # (dolfinx.io.gmsh.model_to_mesh does the same via _cpp.io.perm_gmsh).
+    perm = dfx.io.gmsh.cell_perm_array(dfx.mesh.CellType.hexahedron, hex_cells.shape[1])
+    hex_cells = hex_cells[:, perm]
+    hex_element = basix.ufl.element("Lagrange", "hexahedron", 1, shape=(3,))
+    concrete_mesh = dfx.mesh.create_mesh(
+        MPI.COMM_WORLD, hex_cells, ufl.Mesh(hex_element), msh.points
+    )
+
+    line_cells = msh.get_cells_type("line")
+    rebar_endpoints = msh.points[line_cells]
+
+    tdim = concrete_mesh.topology.dim
+    concrete_mesh.topology.create_connectivity(1, 0)
+    concrete_mesh.topology.create_connectivity(1, tdim)
+    edge_to_vertex = concrete_mesh.topology.connectivity(1, 0)
+    num_edges = concrete_mesh.topology.index_map(1).size_local
+    edge_coords = concrete_mesh.geometry.x[
+        np.array([edge_to_vertex.links(e) for e in range(num_edges)])
+    ]
+
+    rebar_edges = np.empty(len(rebar_endpoints), dtype=np.int32)
+    for i, endpoints in enumerate(rebar_endpoints):
+        forward = np.all(np.isclose(edge_coords, endpoints[None, :, :], atol=tol), axis=(1, 2))
+        backward = np.all(
+            np.isclose(edge_coords, endpoints[None, ::-1, :], atol=tol), axis=(1, 2)
+        )
+        match = np.flatnonzero(forward | backward)
+        assert len(match) == 1, (
+            f"expected exactly 1 matching edge for rebar segment {i}, found {len(match)}"
+        )
+        rebar_edges[i] = match[0]
+
+    # create_submesh's 3rd return value (topological vertex map) is an
+    # EntityMap object, not a plain array; the 4th (geometry node map) is
+    # already a plain ndarray and coincides with it for affine P1 meshes.
+    rebar_mesh, _, _, vertex_map = dfx.mesh.create_submesh(concrete_mesh, 1, rebar_edges)
+    return concrete_mesh, rebar_mesh, vertex_map

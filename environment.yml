@@ -2,7 +2,7 @@ name: fenics-reinforcement
 channels:
   - conda-forge
 dependencies:
-  - fenics-dolfinx
+  - fenics-dolfinx=0.11.0
   - pint
   - pytest
   - python-gmsh
