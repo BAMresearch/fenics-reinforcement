@@ -15,7 +15,7 @@ jobs:
         uses: conda-incubator/setup-miniconda@v3
         with:
             miniforge-version: latest
-            activate-environment: reinforcement
+            activate-environment: reinforcement_docs
             use-mamba: true
 
       - name: Update environment
